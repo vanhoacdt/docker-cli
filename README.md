@@ -1,4 +1,4 @@
-# dps - Docker PS, Image, Log & Disk Overview CLI (Debian 12)
+# dps - Docker PS, Image, Log & Disk Overview CLI (Debian 12) — `v0.0.1`
 
 Công cụ dòng lệnh xem nhanh trạng thái container, image, cấu hình, log và dung lượng hệ thống Docker.
 
