@@ -1,0 +1,567 @@
+#!/usr/bin/env bash
+SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; HELP_MODE=0
+SORT_MODE=""; ONLY_RUNNING=0; TARGET=""; TAIL="20"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) HELP_MODE=1 ;;
+    -s|--stats) SHOW_STATS=1 ;;
+    -p|--ports|--full-ports) FULL_PORTS=1 ;;
+    -d|--deploy|--mounts) DEPLOY_MODE=1 ;;
+    -i|--images) IMAGE_MODE=1 ;;
+    -o|--overview) OVERVIEW_MODE=1 ;;
+    -w|--watch) WATCH_MODE=1 ;;
+    -c|--config|--inspect) INSPECT_MODE=1; shift; TARGET="${1:-}" ;;
+    -l|--logs) LOG_MODE=1; shift; TARGET="${1:-}"; [[ "${2:-}" =~ ^[0-9]+$ ]] && { shift; TAIL="$1"; } ;;
+    -f|--follow) FOLLOW_MODE=1; shift; TARGET="${1:-}"; [[ "${2:-}" =~ ^[0-9]+$ ]] && { shift; TAIL="$1"; } ;;
+    *)
+      case "${1,,}" in
+        mem) SORT_MODE="mem" ;;
+        cpu) SORT_MODE="cpu" ;;
+        run|running) ONLY_RUNNING=1 ;;
+        *) TARGET="$1" ;;
+      esac
+      ;;
+  esac
+  shift || true
+done
+
+if [[ "$HELP_MODE" == "1" ]]; then
+  cat <<'HELP_EOF'
+dps - Trình xem nhanh trạng thái Docker container, image & hệ thống (Debian 12)
+
+Cách dùng:
+  dps [từ_khóa]                   Xem toàn bộ container (CONTAINER, STATUS, RESTART, DISK, PORTS, NETWORKS)
+  dps -s [mem|cpu|run|từ_khóa]    Xem CPU, MEM riêng biệt cùng RESTART, DISK (xếp theo mem/cpu hoặc lọc run)
+  dps -w [mem|cpu|từ_khóa]        Theo dõi trực tiếp CPU & MEM container đang chạy (làm mới mỗi 2s, Ctrl+C để thoát)
+  dps -d [từ_khóa]                Xem DISK, COMPOSE FILE và MOUNTS (phân chia đường kẻ từng container)
+  dps -p [từ_khóa]                Xem container đang chạy + tách HOST/EXPOSE PORTS, NETWORKS, IP, PEER
+  dps -i [từ_khóa]                Xem danh sách Docker image kèm cột STATE và USED BY
+  dps -c <tên_hoặc_#>             Xem gọn cấu hình, network, mount và compose của 1 container
+  dps -o                          Xem tổng quan dung lượng Images, Containers, Local Volumes, Build Cache & volume mồ côi
+  dps -l <tên_hoặc_#> [N]         Xem N dòng log cuối (mặc định 20) theo tên hoặc số thứ tự #
+  dps -f <tên_hoặc_#> [N]         Xem N dòng log trực tiếp (mặc định 20) theo tên hoặc số thứ tự #
+  dps -h | --help                 Hiển thị trợ giúp này
+HELP_EOF
+  exit 0
+fi
+
+if [[ "$OVERVIEW_MODE" == "1" ]]; then
+  python3 - <<'PY'
+import json, re, shutil, subprocess
+
+def parse_bytes(s: str) -> float:
+    s = (s or "").strip().split("(")[0].strip()
+    m = re.match(r"^([0-9.]+)\s*([A-Za-z]+)$", s)
+    if not m: return 0.0
+    val, unit = float(m.group(1)), m.group(2).lower()
+    mult = {"b": 1.0, "kb": 1000.0, "kib": 1024.0, "mb": 1000**2, "mib": 1024**2, "gb": 1000**3, "gib": 1024**3, "tb": 1000**4, "tib": 1024**4}
+    return val * mult.get(unit, 1.0)
+
+def fmt_bytes(b: float) -> str:
+    if b <= 0: return "0B"
+    for u, step in [("GB", 1000**3), ("MB", 1000**2), ("kB", 1000.0)]:
+        if b >= step: return f"{b / step:.2f}{u}"
+    return f"{int(b)}B"
+
+raw = subprocess.check_output(["docker", "system", "df", "-v"], text=True, stderr=subprocess.DEVNULL)
+sec = None
+imgs, conts, vols, caches = [], [], [], []
+cache_total_str = ""
+for line in raw.splitlines():
+    st = line.strip()
+    if st.startswith("Images space usage:"): sec = "img"; continue
+    if st.startswith("Containers space usage:"): sec = "cont"; continue
+    if st.startswith("Local Volumes space usage:"): sec = "vol"; continue
+    if st.startswith("Build cache usage:"):
+        sec = "cache"
+        m_c = re.search(r"Build cache usage:\s*(.+)$", st)
+        if m_c: cache_total_str = m_c.group(1).strip()
+        continue
+    if not st or re.match(r"^(REPOSITORY|CONTAINER ID|VOLUME NAME|CACHE ID)\b", st): continue
+    cols = re.split(r"\s{2,}", st)
+    if sec == "img" and len(cols) >= 8:
+        imgs.append({"repo": cols[0], "tag": cols[1], "id": cols[2], "size": cols[4], "shared": cols[5], "unique": cols[6], "cnt": int(re.findall(r"\d+", cols[7])[0]) if re.findall(r"\d+", cols[7]) else 0})
+    elif sec == "cont" and len(cols) >= 8:
+        conts.append({"id": cols[0], "img": cols[1], "size": cols[4], "status": cols[6], "name": cols[7]})
+    elif sec == "vol" and len(cols) >= 3:
+        links_m = re.findall(r"\d+", cols[1])
+        vols.append({"name": cols[0], "links": int(links_m[0]) if links_m else 0, "size": cols[2]})
+    elif sec == "cache" and len(cols) >= 7:
+        caches.append({"id": cols[0], "type": cols[1], "size": cols[2], "usage": cols[5], "shared": cols[6]})
+
+img_total = sum(parse_bytes(x["size"]) for x in imgs)
+img_active = sum(1 for x in imgs if x["cnt"] > 0)
+img_reclaim = sum(parse_bytes(x["unique"]) for x in imgs if x["cnt"] == 0)
+cont_total = sum(parse_bytes(x["size"]) for x in conts)
+cont_active = sum(1 for x in conts if x["status"].lower().startswith("up"))
+cont_reclaim = sum(parse_bytes(x["size"]) for x in conts if not x["status"].lower().startswith("up"))
+vol_total = sum(parse_bytes(x["size"]) for x in vols)
+vol_active = sum(1 for x in vols if x["links"] > 0)
+vol_reclaim = sum(parse_bytes(x["size"]) for x in vols if x["links"] == 0)
+cache_total = parse_bytes(cache_total_str) if cache_total_str else sum(parse_bytes(x["size"]) for x in caches)
+cache_active = sum(1 for x in caches if str(x["usage"]).strip() not in ("0", ""))
+cache_reclaim = sum(parse_bytes(x["size"]) for x in caches if str(x["usage"]).strip() == "0")
+
+summary_rows = [
+  ["Images", f"{len(imgs)} ({img_active} used)", str(img_active), fmt_bytes(img_total), fmt_bytes(img_reclaim)],
+  ["Containers", f"{len(conts)} ({cont_active} up)", str(cont_active), fmt_bytes(cont_total), fmt_bytes(cont_reclaim)],
+  ["Local Volumes", f"{len(vols)} ({len(vols)-vol_active} orphan)", str(vol_active), fmt_bytes(vol_total), fmt_bytes(vol_reclaim)],
+  ["Build Cache", str(len(caches)), str(cache_active), fmt_bytes(cache_total), fmt_bytes(cache_reclaim)],
+]
+headers = ["TYPE", "TOTAL", "ACTIVE", "SIZE", "RECLAIMABLE"]
+widths = [max(len(x) for x in col) for col in zip(headers, *summary_rows)]
+line_fn = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+fmt_row = lambda cols: "│ " + " │ ".join(val.ljust(widths[i]) for i, val in enumerate(cols)) + " │"
+print(line_fn("┌", "┬", "┐"))
+print(fmt_row(headers))
+print(line_fn("├", "┼", "┤"))
+for r in summary_rows: print(fmt_row(r))
+print(line_fn("└", "┴", "┘"))
+
+orphan_vols = sorted([v for v in vols if v["links"] == 0], key=lambda x: -parse_bytes(x["size"]))
+print(f"\nOrphan Volumes (LINKS=0): {len(orphan_vols)} | Reclaimable: {fmt_bytes(vol_reclaim)}")
+for v in orphan_vols[:8]:
+    print(f"  - {v['name']} ({v['size']})")
+if len(orphan_vols) > 8:
+    print(f"  ... và {len(orphan_vols) - 8} volume khác")
+
+big_conts = sorted([c for c in conts if parse_bytes(c["size"]) > 0], key=lambda x: -parse_bytes(x["size"]))
+if big_conts:
+    print("\nContainer Writable Layer (>0B):")
+    for c in big_conts:
+        print(f"  - {c['name']}: {c['size']} ({c['status']})")
+PY
+  exit 0
+fi
+
+if [[ "$INSPECT_MODE" == "1" ]]; then
+  TARGET="$TARGET" python3 - <<'PY'
+import json, os, subprocess
+target = os.environ.get("TARGET", "").strip()
+raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào.")
+if not target:
+    print("Chọn container (dps -c <#> hoặc dps -c <tên>):")
+    for i, n in enumerate(names, 1): print(f"  {i}. {n}")
+    raise SystemExit(0)
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    matches = [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    cname = matches[0]
+obj = json.loads(subprocess.check_output(["docker", "inspect", cname], text=True))[0]
+home = os.path.expanduser("~")
+def sp(p):
+    p = (p or "").strip()
+    return ("~" + p[len(home):]) if (home and p.startswith(home)) else (p or "-")
+cfg = obj.get("Config") or {}
+hc = obj.get("HostConfig") or {}
+st = obj.get("State") or {}
+labels = cfg.get("Labels") or {}
+nets = (obj.get("NetworkSettings") or {}).get("Networks") or {}
+ep = cfg.get("Entrypoint") or []
+cmd = cfg.get("Cmd") or []
+ep_s = " ".join(ep) if isinstance(ep, list) else str(ep or "-")
+cmd_s = " ".join(cmd) if isinstance(cmd, list) else str(cmd or "-")
+rp = ((hc.get("RestartPolicy") or {}).get("Name") or "no")
+proj = labels.get("com.docker.compose.project") or "-"
+cfile = ", ".join(sp(x) for x in (labels.get("com.docker.compose.project.config_files") or "").split(",") if x.strip()) or "-"
+print(f"=== CONFIG: {cname} ===")
+print(f"Image      : {cfg.get('Image') or '-'}")
+print(f"Status     : {st.get('Status') or '-'}")
+print(f"Restart    : {rp}")
+print(f"Entrypoint : {ep_s or '-'}")
+print(f"Command    : {cmd_s or '-'}")
+print(f"Compose    : {proj} ({cfile})")
+print("Networks   :")
+if nets:
+    for n_k, n_v in sorted(nets.items(), key=lambda kv: (0 if kv[0] == "wifi-net" else (1 if kv[0] == "ci-local_default" else 2), kv[0].lower())):
+        ip = ((n_v or {}).get("IPAddress") or "").strip() or "-"
+        gw = ((n_v or {}).get("Gateway") or "").strip() or "-"
+        print(f"  - {n_k}: IP={ip} | GW={gw}")
+else:
+    print("  - -")
+mounts = obj.get("Mounts") or []
+print("Mounts     :")
+if mounts:
+    for m in mounts:
+        m_type = m.get("Type") or "mount"
+        src = sp(m.get("Source") or "-")
+        dst = m.get("Destination") or "-"
+        rw = "rw" if m.get("RW", True) else "ro"
+        print(f"  - [{m_type}/{rw}] {src} -> {dst}")
+else:
+    print("  - -")
+PY
+  exit 0
+fi
+
+if [[ "$LOG_MODE" == "1" || "$FOLLOW_MODE" == "1" ]]; then
+  TARGET="$TARGET" TAIL="$TAIL" FOLLOW="$FOLLOW_MODE" python3 - <<'PY'
+import os, re, subprocess
+
+target = os.environ.get("TARGET", "").strip()
+tail = os.environ.get("TAIL", "20")
+follow = os.environ.get("FOLLOW") == "1"
+raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào.")
+if not target: raise SystemExit("Vui lòng nhập tên hoặc số thứ tự # (ví dụ: dps -f 1 hoặc dps -f dozzle 50).")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    matches = [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    cname = matches[0]
+
+def fmt_log_line(line: str) -> str:
+    m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+(.*)$", line)
+    if m:
+        ts, msg = m.group(1).replace("T", " "), m.group(2)
+        low = msg.lower()
+        badge = "[ERR]" if any(k in low for k in ("error", "err", "fatal", "panic")) else ("[WRN]" if any(k in low for k in ("warn", "wrn")) else "[INF]")
+        return f"{ts} {badge} {msg}"
+    return line
+
+if follow:
+    print(f"=== FOLLOW LOGS: {cname} (last {tail} lines — Ctrl+C để thoát) ===")
+    proc = subprocess.Popen(["docker", "logs", "--tail", tail, "--follow", "--timestamps", cname], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(fmt_log_line(line.rstrip("\r\n")), flush=True)
+    except KeyboardInterrupt:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        print()
+else:
+    print(f"=== LOGS: {cname} (last {tail} lines) ===")
+    logs = subprocess.check_output(["docker", "logs", "--tail", tail, "--timestamps", cname], text=True, stderr=subprocess.STDOUT)
+    for line in logs.splitlines():
+        print(fmt_log_line(line))
+PY
+  exit 0
+fi
+
+run_render() {
+  SHOW_STATS="$SHOW_STATS" FULL_PORTS="$FULL_PORTS" DEPLOY_MODE="$DEPLOY_MODE" IMAGE_MODE="$IMAGE_MODE" WATCH_MODE="$WATCH_MODE" SORT_MODE="$SORT_MODE" ONLY_RUNNING="$ONLY_RUNNING" FILTER="$TARGET" python3 - <<'PY'
+import json, os, re, shutil, subprocess
+
+show_stats = os.environ.get("SHOW_STATS") == "1"
+full_ports = os.environ.get("FULL_PORTS") == "1"
+deploy_mode = os.environ.get("DEPLOY_MODE") == "1"
+image_mode = os.environ.get("IMAGE_MODE") == "1"
+watch_mode = os.environ.get("WATCH_MODE") == "1"
+sort_mode = os.environ.get("SORT_MODE", "").strip().lower()
+only_running = (os.environ.get("ONLY_RUNNING") == "1") or watch_mode
+flt = os.environ.get("FILTER", "").strip().lower()
+
+if image_mode:
+    ps_raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.State}}"], text=True)
+    c_ids = [l.split("\t")[0].strip() for l in ps_raw.splitlines() if l.strip()]
+    used_by_iid, used_by_name = {}, {}
+    if c_ids:
+        insp = subprocess.check_output(["docker", "inspect", *c_ids], text=True, stderr=subprocess.DEVNULL)
+        for obj in json.loads(insp):
+            iid_full = (obj.get("Image") or "").replace("sha256:", "").strip()
+            iid_short = iid_full[:12]
+            cname = ((obj.get("Name") or "").lstrip("/")).strip()
+            st = (((obj.get("State") or {}).get("Status")) or "").strip().lower() or "used"
+            img_cfg = ((obj.get("Config") or {}).get("Image") or "").strip()
+            entry = (st, cname or "-")
+            if iid_short:
+                used_by_iid.setdefault(iid_short, [])
+                if entry not in used_by_iid[iid_short]: used_by_iid[iid_short].append(entry)
+            if img_cfg:
+                used_by_name.setdefault(img_cfg, [])
+                if entry not in used_by_name[img_cfg]: used_by_name[img_cfg].append(entry)
+    raw = subprocess.check_output(["docker", "images", "--format", "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}"], text=True)
+    rows = []
+    for line in raw.splitlines():
+        if not line.strip(): continue
+        parts = line.split("\t")
+        while len(parts) < 5: parts.append("")
+        repo, tag, iid, size, created = [p.strip() or "-" for p in parts[:5]]
+        iid_s = iid.replace("sha256:", "")[:12]
+        ref_full = f"{repo}:{tag}" if tag != "<none>" else repo
+        entries = list(used_by_iid.get(iid_s, []))
+        for extra in used_by_name.get(ref_full, []):
+            if extra not in entries: entries.append(extra)
+        entries.sort(key=lambda x: (0 if x[0] == "running" else 1, x[1].lower()))
+        states_list = []
+        for st_v, _ in entries:
+            if st_v not in states_list: states_list.append(st_v)
+        mixed = len(states_list) > 1
+        cnames_list = []
+        for st_v, cn_v in entries:
+            lbl = f"{cn_v} ({st_v})" if mixed else cn_v
+            if lbl not in cnames_list: cnames_list.append(lbl)
+        state_str = ", ".join(states_list) if states_list else "-"
+        used_str = ", ".join(cnames_list) if cnames_list else "-"
+        is_pure_running = (states_list == ["running"])
+        has_running = ("running" in states_list)
+        is_used = len(entries) > 0
+        prio = 0 if is_pure_running else (1 if has_running else (2 if is_used else 3))
+        if not flt or flt in f"{repo} {tag} {iid_s} {size} {created} {state_str} {used_str}".lower():
+            rows.append((repo, tag, iid_s, size, created, state_str, used_str, prio, has_running, is_used))
+    rows.sort(key=lambda r: (r[7], r[0].lower(), r[1].lower()))
+    headers = ["#", "REPOSITORY", "TAG", "IMAGE ID", "SIZE", "CREATED", "STATE", "USED BY"]
+    table = [[str(i), r[0], r[1], r[2], r[3], r[4], r[5], r[6]] for i, r in enumerate(rows, 1)]
+    if not table:
+        print("Không có image nào khớp.")
+    else:
+        widths = [max(len(x) for x in col) for col in zip(headers, *table)]
+        term_cols = shutil.get_terminal_size((180, 20)).columns
+        overhead = 1 + 3 * len(headers)
+        max_total = max(60, term_cols - 1)
+        if sum(widths) + overhead > max_total:
+            for idx in [len(headers) - 1, 1]:
+                if sum(widths) + overhead > max_total:
+                    avail = max(14, widths[idx] - ((sum(widths) + overhead) - max_total))
+                    widths[idx] = avail
+                    for row in table:
+                        if len(row[idx]) > avail:
+                            row[idx] = row[idx][:max(1, avail - 1)] + "…"
+        line_fn = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+        def fmt_row(cols, col_code=""):
+            cells = []
+            for idx, val in enumerate(cols):
+                pad = val.ljust(widths[idx])
+                cells.append(f"{col_code}{pad}\033[0m" if col_code else pad)
+            return "│ " + " │ ".join(cells) + " │"
+        print(line_fn("┌", "┬", "┐"))
+        print(fmt_row(headers))
+        print(line_fn("├", "┼", "┤"))
+        for r, raw_r in zip(table, rows):
+            c_code = "\033[36m" if raw_r[8] else ("\033[32m" if raw_r[9] else "")
+            print(fmt_row(r, c_code))
+        print(line_fn("└", "┴", "┘"))
+    used_cnt = sum(1 for r in rows if r[9])
+    unused_cnt = sum(1 for r in rows if not r[9])
+    print(f"Total images: {len(rows)} | In use: {used_cnt} | Unused: {unused_cnt}")
+    raise SystemExit(0)
+
+need_size = (not full_ports)
+fmt_str = "{{.ID}}\t{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}\t{{.Image}}" + ("\t{{.Size}}" if need_size else "")
+ps_cmd = ["docker", "ps", "-a"] + (["--size"] if need_size else []) + ["--format", fmt_str]
+raw = subprocess.check_output(ps_cmd, text=True)
+ids = [l.split("\t")[0].strip() for l in raw.splitlines() if l.strip()]
+home = os.path.expanduser("~")
+def short_path(p: str) -> str:
+    p = (p or "").strip()
+    if not p: return "-"
+    if home and p.startswith(home): return "~" + p[len(home):]
+    return p
+
+net_info_map, compose_map, restart_map, mounts_map = {}, {}, {}, {}
+if ids:
+    insp = subprocess.check_output(["docker", "inspect", *ids], text=True, stderr=subprocess.DEVNULL)
+    for obj in json.loads(insp):
+        cid = (obj.get("Id") or "")[:12]
+        nets = (obj.get("NetworkSettings") or {}).get("Networks") or {}
+        ordered = sorted(nets.items(), key=lambda kv: (0 if kv[0] == "wifi-net" else (1 if kv[0] == "ci-local_default" else 2), kv[0].lower()))
+        entries = [(n_name, ((n_cfg or {}).get("IPAddress") or "").strip() or "-") for n_name, n_cfg in ordered]
+        net_info_map[cid] = entries
+        labels = ((obj.get("Config") or {}).get("Labels")) or {}
+        cfg_files = (labels.get("com.docker.compose.project.config_files") or "").strip()
+        work_dir = (labels.get("com.docker.compose.project.working_dir") or "").strip()
+        if cfg_files:
+            c_list = [short_path(x) for x in cfg_files.split(",") if x.strip()]
+            compose_map[cid] = ", ".join(c_list) if c_list else "-"
+        elif work_dir:
+            compose_map[cid] = short_path(work_dir)
+        else:
+            compose_map[cid] = "-"
+        rp = (((obj.get("HostConfig") or {}).get("RestartPolicy")) or {}).get("Name") or "no"
+        restart_map[cid] = rp.strip() or "no"
+        m_list = []
+        for m in (obj.get("Mounts") or []):
+            src = (m.get("Source") or "").strip()
+            if src:
+                sp = short_path(src)
+                if sp not in m_list: m_list.append(sp)
+        mounts_map[cid] = "\n".join(m_list) if m_list else "-"
+
+def parse_mem_mib(mem_s: str) -> float:
+    m = re.match(r"^([0-9.]+)\s*([A-Za-z]+)$", (mem_s or "").strip())
+    if not m: return -1.0
+    val, unit = float(m.group(1)), m.group(2).lower()
+    mult = {"b": 1/(1024*1024), "kb": 1/1024, "kib": 1/1024, "mb": 1.0, "mib": 1.0, "gb": 1024.0, "gib": 1024.0}
+    return val * mult.get(unit, 1.0)
+
+def parse_cpu_pct(cpu_s: str) -> float:
+    m = re.match(r"^([0-9.]+)%$", (cpu_s or "").strip())
+    return float(m.group(1)) if m else -1.0
+
+cpu_map, mem_map, metric_map = {}, {}, {}
+if (show_stats or watch_mode) and not full_ports and not deploy_mode:
+    s_raw = subprocess.check_output(["docker", "stats", "--no-stream", "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"], text=True, stderr=subprocess.DEVNULL)
+    for l in s_raw.splitlines():
+        p = l.split("\t")
+        if len(p) >= 3:
+            cname_s, cpu_s, mem_s = p[0].strip(), p[1].strip(), p[2].split("/")[0].strip()
+            cpu_map[cname_s] = cpu_s or "-"
+            mem_map[cname_s] = mem_s or "-"
+            metric_map[cname_s] = (parse_cpu_pct(cpu_s), parse_mem_mib(mem_s))
+
+def fmt_disk(sz: str) -> str:
+    s = (sz or "").strip()
+    if not s: return "-"
+    return s.split("(")[0].strip() or "-"
+
+def split_ports(p: str, full: bool = False):
+    if not p.strip(): return "-", "-"
+    seen, mapped, exposed = set(), [], []
+    for item in p.split(","):
+        it = re.sub(r"^(?:0\.0\.0\.0:|\[::\]:)", "", item.strip())
+        if not it: continue
+        if not full:
+            m = re.match(r"^(\d+)->(\d+)(/\w+)$", it)
+            if m and m.group(1) == m.group(2): it = f"{m.group(1)}{m.group(3)}"
+        if it in seen: continue
+        seen.add(it)
+        if "->" in it: mapped.append(it)
+        else: exposed.append(it)
+    return (", ".join(mapped) if mapped else "-"), (", ".join(exposed) if exposed else "-")
+
+def fmt_ports(p: str, full: bool = False) -> str:
+    m_s, e_s = split_ports(p, full)
+    parts = [x for x in (m_s, e_s) if x != "-"]
+    return " | ".join(parts) if parts else "-"
+
+def fmt_nets(n: str) -> str:
+    if not n.strip(): return "-"
+    items = [x.strip() for x in n.split(",") if x.strip()]
+    items.sort(key=lambda x: (0 if x == "wifi-net" else (1 if x == "ci-local_default" else 2), x.lower()))
+    return ", ".join(items) if items else "-"
+
+rows, all_states = [], []
+for line in raw.splitlines():
+    if not line.strip(): continue
+    parts = line.split("\t")
+    while len(parts) < 8: parts.append("")
+    cid, name, state, status, ports, nets, image, size_raw = [p.strip() for p in parts[:8]]
+    cid_short = cid[:12]
+    st_low = state.lower()
+    all_states.append(st_low)
+    if full_ports and st_low != "running": continue
+    if only_running and st_low != "running": continue
+    entries = net_info_map.get(cid_short, [])
+    if not entries and nets.strip():
+        ns = [x.strip() for x in nets.split(",") if x.strip()]
+        ns.sort(key=lambda x: (0 if x == "wifi-net" else (1 if x == "ci-local_default" else 2), x.lower()))
+        entries = [(x, "-") for x in ns]
+    main_net = entries[0][0] if entries else "-"
+    main_ip = entries[0][1] if entries else "-"
+    peer_nets = ", ".join(x[0] for x in entries[1:]) if len(entries) > 1 else "-"
+    peer_ips = ", ".join(x[1] for x in entries[1:]) if len(entries) > 1 else "-"
+    disk_val = fmt_disk(size_raw)
+    compose_val = compose_map.get(cid_short, "-")
+    restart_val = restart_map.get(cid_short, "no")
+    mounts_val = mounts_map.get(cid_short, "-")
+    mounts_search = mounts_val.replace("\n", ", ")
+    h_ports, e_ports = split_ports(ports, full_ports)
+    p_fmt, n_fmt = fmt_ports(ports, full_ports), fmt_nets(nets)
+    cpu_val = cpu_map.get(name, "-") if ((show_stats or watch_mode) and not full_ports and not deploy_mode) else "-"
+    mem_val = mem_map.get(name, "-") if ((show_stats or watch_mode) and not full_ports and not deploy_mode) else "-"
+    cpu_f, mem_f = metric_map.get(name, (-1.0, -1.0))
+    if not flt or flt in f"{cid_short} {name} {state} {status} {restart_val} {cpu_val} {mem_val} {disk_val} {mounts_search} {main_net} {main_ip} {peer_nets} {peer_ips} {h_ports} {e_ports} {p_fmt} {n_fmt} {compose_val} {image}".lower():
+        rows.append((cid_short, name, state, status, restart_val, cpu_val, mem_val, disk_val, p_fmt, n_fmt, h_ports, e_ports, main_net, main_ip, peer_nets, peer_ips, compose_val, mounts_val, 0 if st_low == "running" else 1, cpu_f, mem_f))
+
+if (show_stats or watch_mode) and not full_ports and not deploy_mode and sort_mode == "mem":
+    rows.sort(key=lambda r: (r[18], -r[20], r[1].lower()))
+elif (show_stats or watch_mode) and not full_ports and not deploy_mode and sort_mode == "cpu":
+    rows.sort(key=lambda r: (r[18], -r[19], r[1].lower()))
+else:
+    rows.sort(key=lambda r: r[1].lower())
+
+def color_for(state, status):
+    st, s = state.lower(), status.lower()
+    if "unhealthy" in s or st == "restarting" or re.search(r"exited \([1-9][0-9]*\)", s): return "\033[31m"
+    if "healthy" in s: return "\033[32m"
+    if st == "running": return "\033[36m"
+    if "exited (0)" in s: return ""
+    return "\033[35m"
+
+if full_ports:
+    headers = ["#", "CONTAINER", "HOST PORTS", "EXPOSE PORTS", "NETWORKS", "IP", "PEER NETWORKS", "PEER IP"]
+    table = [[str(i), r[1], r[10], r[11], r[12], r[13], r[14], r[15]] for i, r in enumerate(rows, 1)]
+elif deploy_mode:
+    headers = ["#", "CONTAINER", "DISK", "COMPOSE FILE", "MOUNTS"]
+    table = [[str(i), r[1], r[7], r[16], r[17]] for i, r in enumerate(rows, 1)]
+elif show_stats or watch_mode:
+    headers = ["#", "CONTAINER", "STATUS", "RESTART", "CPU", "MEM", "DISK"]
+    table = [[str(i), r[1], r[3], r[4], r[5], r[6], r[7]] for i, r in enumerate(rows, 1)]
+else:
+    headers = ["#", "CONTAINER", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
+    table = [[str(i), r[1], r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
+
+if not table:
+    print("Không có container nào khớp.")
+else:
+    widths = []
+    for c_idx, h in enumerate(headers):
+        max_v = len(h)
+        for row in table:
+            for ln in row[c_idx].split("\n"):
+                if len(ln) > max_v: max_v = len(ln)
+        widths.append(max_v)
+    term_cols = shutil.get_terminal_size((180, 20)).columns
+    overhead = 1 + 3 * len(headers)
+    max_total = max(60, term_cols - 1)
+    if sum(widths) + overhead > max_total:
+        flex_order = [len(headers) - 1, len(headers) - 2]
+        for idx in flex_order:
+            if idx < len(widths) and sum(widths) + overhead > max_total:
+                avail = max(12, widths[idx] - ((sum(widths) + overhead) - max_total))
+                widths[idx] = avail
+                for r_i, row in enumerate(table):
+                    new_lines = []
+                    for ln in row[idx].split("\n"):
+                        new_lines.append(ln[:max(1, avail - 1)] + "…" if len(ln) > avail else ln)
+                    table[r_i][idx] = "\n".join(new_lines)
+    line_fn = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+    def render_row_lines(cols, col_code=""):
+        split_cols = [c.split("\n") for c in cols]
+        max_h = max(len(sc) for sc in split_cols)
+        out = []
+        for h_i in range(max_h):
+            cells = []
+            for idx, sc in enumerate(split_cols):
+                val = sc[h_i] if h_i < len(sc) else ""
+                pad = val.ljust(widths[idx])
+                cells.append(f"{col_code}{pad}\033[0m" if col_code else pad)
+            out.append("│ " + " │ ".join(cells) + " │")
+        return out
+    print(line_fn("┌", "┬", "┐"))
+    for l_out in render_row_lines(headers): print(l_out)
+    print(line_fn("├", "┼", "┤"))
+    for r_idx, (r, raw_r) in enumerate(zip(table, rows)):
+        for l_out in render_row_lines(r, color_for(raw_r[2], raw_r[3])): print(l_out)
+        if deploy_mode and r_idx < len(table) - 1:
+            print(line_fn("├", "┼", "┤"))
+    print(line_fn("└", "┴", "┘"))
+
+PY
+}
+
+if [[ "$WATCH_MODE" == "1" ]]; then
+  trap 'printf "\n"' INT
+  while true; do
+    OUT="$(run_render 2>&1)" || true
+    printf "\033[H\033[2J[Watch 2s — Ctrl+C để thoát]\n%s\n" "$OUT"
+    sleep 2 || break
+  done
+else
+  run_render
+fi
