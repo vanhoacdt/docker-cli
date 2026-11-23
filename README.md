@@ -4,37 +4,37 @@ Công cụ dòng lệnh xem nhanh trạng thái container, image, cấu hình, l
 
 ## Cài đặt nhanh (từ thư mục repo)
 
-bash
+```bash
 chmod +x dps.sh
 sudo ln -sf "$(pwd)/dps.sh" /usr/local/bin/dps
 sudo cp dps.bash-completion /etc/bash_completion.d/dps
 source /etc/bash_completion.d/dps
-
+```
 
 ## Cài đặt khi chuyển máy mới
 
 1. Cài `git`, `python3`, `bash-completion` (nếu máy mới chưa có) và clone repository:
 
-bash
+```bash
 sudo apt-get update && sudo apt-get install -y git python3 bash-completion
 git clone https://github.com/vanhoacdt/docker-cli.git ~/dps-cli
 cd ~/dps-cli
-
+```
 
 2. Liên kết lệnh `dps` và kích hoạt tab completion:
 
-bash
+```bash
 chmod +x ~/dps-cli/dps.sh
 sudo ln -sf ~/dps-cli/dps.sh /usr/local/bin/dps
 sudo cp ~/dps-cli/dps.bash-completion /etc/bash_completion.d/dps
 source /etc/bash_completion.d/dps
-
+```
 
 3. Kiểm tra nhanh sau khi chuyển máy:
 
-bash
+```bash
 which dps && dps -h
-
+```
 
 ## Cách dùng
 
