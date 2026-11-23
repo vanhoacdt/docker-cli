@@ -1,0 +1,77 @@
+_dps_container_names() {
+  docker ps -a --format '{{.Names}}' 2>/dev/null | sort -f
+}
+
+_dps_running_names() {
+  docker ps --format '{{.Names}}' 2>/dev/null | sort -f
+}
+
+_dps_image_repos() {
+  docker images --format '{{.Repository}}' 2>/dev/null | grep -v '^<none>$' | sort -u -f
+}
+
+_dps_completions() {
+  local cur first idx
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  first="${COMP_WORDS[1]:-}"
+  idx="${COMP_CWORD}"
+
+  local short_opts="-s -w -e -d -p -i -c -o -l -f -h"
+
+  if [[ "$idx" -eq 1 ]]; then
+    if [[ -z "$cur" || "$cur" == -* ]]; then
+      COMPREPLY=( $(compgen -W "$short_opts" -- "$cur") )
+    else
+      COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
+    fi
+    return 0
+  fi
+
+  if [[ "$cur" == -* ]]; then
+    COMPREPLY=( $(compgen -W "$short_opts" -- "$cur") )
+    return 0
+  fi
+
+  case "$first" in
+    -e|--exec)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )
+      elif [[ "$idx" -eq 3 ]]; then
+        COMPREPLY=( $(compgen -W "/bin/bash /bin/sh bash sh" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
+    -l|--logs|-f|--follow|-c|--config|--inspect)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
+      elif [[ "$idx" -eq 3 && ( "$first" == "-l" || "$first" == "--logs" || "$first" == "-f" || "$first" == "--follow" ) ]]; then
+        COMPREPLY=( $(compgen -W "20 40 100 200" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
+    -i|--images)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_image_repos)" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
+    -w|--watch)
+      COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )
+      return 0
+      ;;
+    -s|--stats)
+      COMPREPLY=()
+      return 0
+      ;;
+  esac
+
+  COMPREPLY=()
+}
+
+complete -F _dps_completions dps
