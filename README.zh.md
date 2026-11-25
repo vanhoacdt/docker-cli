@@ -89,15 +89,16 @@ which dps 2>/dev/null || echo "已卸载 dps"
 
 ## 使用方法
 
-- `dps [关键词]` — 查看容器列表（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
-- `dps -s` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`
+- `dps [关键词]` — 查看运行中容器列表（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
+- `dps -a [关键词]` — 查看所有容器（包括已停止的容器，格式与 `dps` 相同）
+- `dps -s [-a]` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`（添加 `-a` 可同时查看已停止容器）
 - `dps -w [容器名]` — 直接运行 `docker stats`
 - `dps -e <容器> [shell]` — 打开交互式终端 `docker exec -it`（`/bin/bash` -> `/bin/sh`）
-- `dps -d [关键词]` — 查看 `DISK`、`VIRTUAL`、`COMPOSE FILE` 和 `MOUNTS`
+- `dps -d [-a] [关键词]` — 查看 `DISK`、`VIRTUAL`、`COMPOSE FILE` 和 `MOUNTS`
 - `dps -p [关键词]` — 查看运行中容器 + 分离显示 `HOST/EXPOSE PORTS`、`NETWORKS`、`IP`、`PEER`
 - `dps -i [关键词]` — 查看 Docker 镜像列表，附带 `STATE` 和 `USED BY` 列
 - `dps -c <名称或#>` — 查看单个容器的配置、网络、挂载和 Compose 信息
 - `dps -o` — 查看 `Images`、`Containers`、`Local Volumes`、`Build Cache` 及悬空卷空间概览
-- `dps -l <名称或#> [N]` — 查看末尾 `N` 行日志（默认 40）
-- `dps -f <名称或#> [N]` — 实时跟踪末尾 `N` 行日志（默认 40）
+- `dps -l <名称或#> [N]` — 查看末尾 `N` 行日志（默认 20）
+- `dps -f <名称或#> [N]` — 实时跟踪末尾 `N` 行日志（默认 20）
 - `dps -h` — 查看帮助

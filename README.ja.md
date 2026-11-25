@@ -90,15 +90,16 @@ which dps 2>/dev/null || echo "dps をアンインストールしました"
 
 ## 使い方
 
-- `dps [キーワード]` — コンテナ一覧（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
-- `dps -s` — `CPU`、`MEM`、`RESTART`、`DISK` を表示
+- `dps [キーワード]` — 稼働中コンテナ一覧（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
+- `dps -a [キーワード]` — 停止中を含むすべてのコンテナ一覧（`dps` と同じ形式）
+- `dps -s [-a]` — `CPU`、`MEM`、`RESTART`、`DISK` を表示（`-a` 追加で停止中コンテナも表示）
 - `dps -w [コンテナ名]` — `docker stats` を直接実行
 - `dps -e <container> [shell]` — 対話シェル `docker exec -it` を起動（`/bin/bash` -> `/bin/sh`）
-- `dps -d [キーワード]` — `DISK`、`VIRTUAL`、`COMPOSE FILE`、`MOUNTS` を表示
+- `dps -d [-a] [キーワード]` — `DISK`、`VIRTUAL`、`COMPOSE FILE`、`MOUNTS` を表示
 - `dps -p [キーワード]` — 稼働中コンテナ + `HOST/EXPOSE PORTS`、`NETWORKS`、`IP`、`PEER` を分離表示
 - `dps -i [キーワード]` — `STATE` と `USED BY` 列付きの Docker イメージ一覧
 - `dps -c <名前または#>` — 1つのコンテナの設定、ネットワーク、マウント、Compose 情報
 - `dps -o` — `Images`、`Containers`、`Local Volumes`、`Build Cache` と孤立ボリュームの容量概要
-- `dps -l <名前または#> [N]` — 末尾 `N` 行のログを表示（デフォルト 40）
-- `dps -f <名前または#> [N]` — 末尾 `N` 行のログをリアルタイム追跡（デフォルト 40）
+- `dps -l <名前または#> [N]` — 末尾 `N` 行のログを表示（デフォルト 20）
+- `dps -f <名前または#> [N]` — 末尾 `N` 行のログをリアルタイム追跡（デフォルト 20）
 - `dps -h` — ヘルプを表示

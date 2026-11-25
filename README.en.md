@@ -90,15 +90,16 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 
 ## Usage
 
-- `dps [keyword]` — List containers (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
-- `dps -s` — View `CPU`, `MEM`, `RESTART`, `DISK`
+- `dps [keyword]` — List running containers (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
+- `dps -a [keyword]` — List all containers including stopped ones (same format as `dps`)
+- `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
 - `dps -w [container_name]` — Run `docker stats` directly
 - `dps -e <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)
-- `dps -d [keyword]` — View `DISK`, `VIRTUAL`, `COMPOSE FILE`, and `MOUNTS`
+- `dps -d [-a] [keyword]` — View `DISK`, `VIRTUAL`, `COMPOSE FILE`, and `MOUNTS`
 - `dps -p [keyword]` — View running containers with split `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
 - `dps -i [keyword]` — List Docker images with `STATE` and `USED BY` columns
 - `dps -c <name_or_#>` — Show config, network, mount, and compose details for a single container
 - `dps -o` — Disk usage overview for `Images`, `Containers`, `Local Volumes`, `Build Cache` & orphan volumes
-- `dps -l <name_or_#> [N]` — View last `N` log lines (default 40)
-- `dps -f <name_or_#> [N]` — Follow last `N` live log lines (default 40)
+- `dps -l <name_or_#> [N]` — View last `N` log lines (default 20)
+- `dps -f <name_or_#> [N]` — Follow last `N` live log lines (default 20)
 - `dps -h` — Help

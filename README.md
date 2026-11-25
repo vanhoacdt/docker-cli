@@ -91,15 +91,16 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 
 ## Cách dùng
 
-- `dps [từ_khóa]` — Danh sách container (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
-- `dps -s` — Xem `CPU`, `MEM`, `RESTART`, `DISK`
+- `dps [từ_khóa]` — Danh sách container đang chạy (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
+- `dps -a [từ_khóa]` — Danh sách toàn bộ container kể cả đã dừng (format như `dps`)
+- `dps -s [-a]` — Xem `CPU`, `MEM`, `RESTART`, `DISK` (thêm `-a` để xem cả container đã dừng)
 - `dps -w [tên_container]` — Chạy trực tiếp `docker stats`
 - `dps -e <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
-- `dps -d [từ_khóa]` — Xem `DISK`, `COMPOSE FILE` và `MOUNTS`
+- `dps -d [-a] [từ_khóa]` — Xem `DISK`, `VIRTUAL`, `COMPOSE FILE` và `MOUNTS`
 - `dps -p [từ_khóa]` — Xem container đang chạy + tách `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
 - `dps -i [từ_khóa]` — Danh sách Docker images kèm cột `STATE` và `USED BY`
 - `dps -c <tên_hoặc_#>` — Cấu hình, network, mount và compose của 1 container
 - `dps -o` — Tổng quan dung lượng `Images`, `Containers`, `Local Volumes`, `Build Cache` & orphan volumes
-- `dps -l <tên_hoặc_#> [N]` — Xem `N` dòng log cuối (mặc định 40)
-- `dps -f <tên_hoặc_#> [N]` — Theo dõi `N` dòng log trực tiếp (mặc định 40)
+- `dps -l <tên_hoặc_#> [N]` — Xem `N` dòng log cuối (mặc định 20)
+- `dps -f <tên_hoặc_#> [N]` — Theo dõi `N` dòng log trực tiếp (mặc định 20)
 - `dps -h` — Trợ giúp
