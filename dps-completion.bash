@@ -45,7 +45,17 @@ _dps_completion() {
     # Gợi ý service của dự án khi đã nhập đường dẫn / tên dự án ở vị trí tham số trước đó
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
-            -u|--up|-r|--restart|-k|--stop|-m|--rm|-l|--logs|-f|--follow|-c|--inspect|-t|--top|-x|--exec|-w|--watch)
+            -r|--restart|-k|--stop|-m|--rm)
+                local svcs=""
+                [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
+                local running projs
+                running=$(docker ps --format "{{.Names}}" 2>/dev/null)
+                projs=$(_dps_list_projects)
+                COMPREPLY=( $(compgen -W "$svcs $running $projs" -- "$cur") )
+                [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
+                return 0
+                ;;
+            -u|--up|-l|--logs|-f|--follow|-c|--inspect|-t|--top|-x|--exec|-w|--watch)
                 local svcs
                 svcs=$(_dps_find_compose_svcs "${words[2]}")
                 if [[ -n "$svcs" ]]; then

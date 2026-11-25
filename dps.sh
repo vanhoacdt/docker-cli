@@ -86,6 +86,74 @@ for name, _ in matched:
 PY_PROJ
 }
 
+
+run_multi_container_action() {
+  local action_flag="$1"
+  local docker_cmd="$2"
+  local label="$3"
+  local only_run="$4"
+  shift 4
+
+  if [[ $# -eq 0 ]]; then
+    echo "Dùng: dps $action_flag <tên_hoặc_#_hoặc_dự_án> [mục_tiêu_2...]" >&2
+    exit 1
+  fi
+
+  if [[ $# -eq 2 ]] && CFILE="$(resolve_compose_context "$1")"; then
+    mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "$only_run" "$2")
+    if [[ ${#PROJ_CTRS[@]} -gt 0 ]]; then
+      for c in "${PROJ_CTRS[@]}"; do
+        $docker_cmd "$c" >/dev/null && echo "$label: $c"
+      done
+      return 0
+    fi
+  fi
+
+  local rc=0
+  for item in "$@"; do
+    if CFILE="$(resolve_compose_context "$item")"; then
+      mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "$only_run" "")
+      if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+        echo "Không tìm thấy container phù hợp trong dự án: $item" >&2
+        rc=1
+        continue
+      fi
+      for c in "${PROJ_CTRS[@]}"; do
+        $docker_cmd "$c" >/dev/null && echo "$label: $c" || rc=1
+      done
+    else
+      CNAME="$(TARGET="$item" ONLY_RUN="$only_run" python3 - <<'PY_RES'
+import os, subprocess
+target = os.environ.get("TARGET", "").strip()
+only_run = os.environ.get("ONLY_RUN", "0") == "1"
+cmd = ["docker", "ps", "--format", "{{.Names}}"] if only_run else ["docker", "ps", "-a", "--format", "{{.Names}}"]
+raw = subprocess.check_output(cmd, text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names:
+    raise SystemExit("Không có container nào phù hợp.")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names):
+        raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    print(names[idx - 1])
+else:
+    exact = [n for n in names if n.lower() == target.lower()]
+    matches = exact or [n for n in names if target.lower() in n.lower()]
+    if not matches:
+        raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    print(matches[0])
+PY_RES
+)"
+      if [[ -z "$CNAME" ]]; then
+        rc=1
+        continue
+      fi
+      $docker_cmd "$CNAME" >/dev/null && echo "$label: $CNAME" || rc=1
+    fi
+  done
+  return $rc
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) HELP_MODE=1 ;;
@@ -154,109 +222,17 @@ while [[ $# -gt 0 ]]; do
       ;;
     -r|--restart)
       shift
-      TARGET_ARG="${1:-}"
-      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -r <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
-      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
-        shift
-        SVC_ARG="${1:-}"
-        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "0" "$SVC_ARG")
-        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
-          echo "Không tìm thấy container phù hợp trong dự án: $CFILE" >&2
-          exit 1
-        fi
-        for c in "${PROJ_CTRS[@]}"; do
-          docker restart "$c" >/dev/null && echo "Đã restart: $c"
-        done
-        exit 0
-      fi
-      shift
-      TARGET_R="${1:-}"
-      [[ -z "$TARGET_R" ]] && { echo "Dùng: dps -r <tên_hoặc_#>" >&2; exit 1; }
-      TARGET="$TARGET_R" python3 - <<'PY'
-import os, subprocess
-target = os.environ.get("TARGET", "").strip()
-raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
-names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
-if not names: raise SystemExit("Không có container nào.")
-if target.isdigit():
-    idx = int(target)
-    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
-    cname = names[idx - 1]
-else:
-    exact = [n for n in names if n.lower() == target.lower()]
-    matches = exact or [n for n in names if target.lower() in n.lower()]
-    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
-    cname = matches[0]
-print(f"Đang khởi động lại: {cname} ...")
-subprocess.run(["docker", "restart", cname], check=True)
-print(f"Đã restart xong: {cname}")
-PY
+      run_multi_container_action "-r" "docker restart" "Đã restart" "0" "$@"
       exit $?
       ;;
     -k|--stop)
       shift
-      TARGET_ARG="${1:-}"
-      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -k <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
-      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
-        shift
-        SVC_ARG="${1:-}"
-        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "$SVC_ARG")
-        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
-          echo "Không tìm thấy container phù hợp trong dự án: $CFILE" >&2
-          exit 1
-        fi
-        for c in "${PROJ_CTRS[@]}"; do
-          docker stop "$c" >/dev/null && echo "Đã dừng: $c"
-        done
-        exit 0
-      fi
-      shift
-      TARGET_K="${1:-}"
-      [[ -z "$TARGET_K" ]] && { echo "Dùng: dps -k <tên_hoặc_#>" >&2; exit 1; }
-      TARGET="$TARGET_K" python3 - <<'PY'
-import os, subprocess
-target = os.environ.get("TARGET", "").strip()
-raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
-names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
-if not names: raise SystemExit("Không có container nào.")
-if target.isdigit():
-    idx = int(target)
-    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
-    cname = names[idx - 1]
-else:
-    exact = [n for n in names if n.lower() == target.lower()]
-    matches = exact or [n for n in names if target.lower() in n.lower()]
-    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
-    cname = matches[0]
-print(f"Đang dừng container: {cname} ...")
-subprocess.run(["docker", "stop", cname], check=True)
-print(f"Đã stop: {cname}")
-PY
+      run_multi_container_action "-k" "docker stop" "Đã dừng" "1" "$@"
       exit $?
       ;;
     -m|--rm|--remove)
       shift
-      TARGET_M="${1:-}"
-      [[ -z "$TARGET_M" ]] && { echo "Dùng: dps -m <tên_hoặc_#>" >&2; exit 1; }
-      TARGET="$TARGET_M" python3 - <<'PY'
-import os, subprocess
-target = os.environ.get("TARGET", "").strip()
-raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
-names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
-if not names: raise SystemExit("Không có container nào.")
-if target.isdigit():
-    idx = int(target)
-    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
-    cname = names[idx - 1]
-else:
-    exact = [n for n in names if n.lower() == target.lower()]
-    matches = exact or [n for n in names if target.lower() in n.lower()]
-    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
-    cname = matches[0]
-print(f"Đang xóa container (rm -f): {cname} ...")
-subprocess.run(["docker", "rm", "-f", cname], check=True)
-print(f"Đã xóa: {cname}")
-PY
+      run_multi_container_action "-m" "docker rm -f" "Đã xóa" "0" "$@"
       exit $?
       ;;
     -t|--top)
