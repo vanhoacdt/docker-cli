@@ -97,12 +97,6 @@ which dps 2>/dev/null || echo "已卸载 dps"
 - `dps -m <名称或#>` — 按名称或序号 `#` 强制删除容器（`docker rm -f`）
 - `dps -n [网络名称]` — 查看 Docker 网络、子网、网关及已连接的容器
 - `dps -t <名称或#>` — 查看容器内正在运行的进程（`docker top`）
-- `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
-- `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
-- `dps -k <名称或#>` — 按名称或序号 `#` 停止容器（`docker stop`）
-- `dps -m <名称或#>` — 按名称或序号 `#` 强制删除容器（`docker rm -f`）
-- `dps -n [网络名称]` — 查看 Docker 网络、子网、网关及已连接的容器
-- `dps -t <名称或#>` — 查看容器内正在运行的进程（`docker top`）
 - `dps -s [-a]` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`（添加 `-a` 可同时查看已停止容器）
 - `dps -w [容器名]` — 直接运行 `docker stats`
 - `dps -x <容器> [shell]` — 打开交互式终端 `docker exec -it`（`/bin/bash` -> `/bin/sh`）
@@ -115,3 +109,18 @@ which dps 2>/dev/null || echo "已卸载 dps"
 - `dps -l <名称或#> [N]` — 查看末尾 `N` 行日志（默认 20）
 - `dps -f <名称或#> [N]` — 实时跟踪末尾 `N` 行日志（默认 20）
 - `dps -h` — 查看帮助
+
+## Tab 自动补全与智能目标解析机制
+
+无论当前处于哪个目录，按下 **`Tab`** 键均可根据命令参数提供上下文感知的智能补全：
+
+- **参数与容器即时提示：** 输入 `dps -` 后按 `Tab` 列出所有可用参数；输入 `dps ` + `Tab` 自动提示正在运行的容器名及 `~/docker/` 下的项目名称。
+- **按参数区分上下文补全：**
+  - `dps -r`、`-k`、`-m`、`-t`、`-x`、`-l`、`-f`、`-w`：自动补全运行中的容器名、`~/docker/` 下的项目名以及目录/文件路径。
+  - `dps -c`、`-a`、`-s`、`-d`、`-p`、`-e`：自动补全所有容器（含已停止容器）、项目名及文件路径。
+  - `dps -n`：自动补全现有的 Docker 网络名称。
+  - `dps -i`：自动补全 Docker 镜像仓库名称。
+- **Compose 项目多级联动补全（`-u` 及其他操作命令）：**
+  1. **位于包含 `docker-compose.yml` 的目录内时：** 在 `dps -u ` 后按 `Tab`，直接提示该 Compose 文件中定义的各个 **service** 名称。
+  2. **位于外部任意目录时：** 在 `dps -u `（或 `-r`、`-k`、`-l`、`-x` 等）后按 `Tab`，自动提示 `~/docker/` 目录下的**项目名称**（如 `homeassistant`、`dozzle`、`ci-local`）或补全目录路径（如 `~/docker/homeassistant/`）。
+  3. **项目内服务名二级补全：** 输入项目名或目录路径后（例如 `dps -u ~/docker/homeassistant/ ` 或 `dps -r homeassistant `），再次按 `Tab` 会自动解析目标 Compose 文件并提示其内部的各个 **service** 名称（使用 `-u` 时还会同时提示 `--force-recreate`、`--build`、`--no-deps` 等常用参数）。

@@ -99,12 +99,6 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 - `dps -m <tên_hoặc_#>` — Dừng và xóa (`docker rm -f`) container theo tên hoặc số thứ tự `#`
 - `dps -n [tên_mạng]` — Xem danh sách Docker networks, subnet, gateway & container đang kết nối
 - `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
-- `dps -u [service...]` — Chạy `docker compose up -d` ở thư mục hiện tại
-- `dps -r <tên_hoặc_#>` — Khởi động lại (`docker restart`) container theo tên hoặc số thứ tự `#`
-- `dps -k <tên_hoặc_#>` — Dừng (`docker stop`) container theo tên hoặc số thứ tự `#`
-- `dps -m <tên_hoặc_#>` — Dừng và xóa (`docker rm -f`) container theo tên hoặc số thứ tự `#`
-- `dps -n [tên_mạng]` — Xem danh sách Docker networks, subnet, gateway & container đang kết nối
-- `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
 - `dps -s [-a]` — Xem `CPU`, `MEM`, `RESTART`, `DISK` (thêm `-a` để xem cả container đã dừng)
 - `dps -w [tên_container]` — Chạy trực tiếp `docker stats`
 - `dps -x <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
@@ -117,3 +111,18 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 - `dps -l <tên_hoặc_#> [N]` — Xem `N` dòng log cuối (mặc định 20)
 - `dps -f <tên_hoặc_#> [N]` — Theo dõi `N` dòng log trực tiếp (mặc định 20)
 - `dps -h` — Trợ giúp
+
+## Cơ chế Tab Completion & Nhận diện mục tiêu thông minh
+
+Hệ thống tự động hoàn thành khi bấm phím **`Tab`** hỗ trợ ngữ cảnh linh hoạt cho tất cả các cờ lệnh từ bất kỳ thư mục nào:
+
+- **Gợi ý cờ & container trực tiếp:** Gõ `dps -` rồi bấm `Tab` để liệt kê toàn bộ tùy chọn; gõ `dps ` + `Tab` để gợi ý nhanh tên các container đang chạy và tên dự án trong `~/docker/`.
+- **Gợi ý theo ngữ cảnh từng cờ:**
+  - `dps -r`, `-k`, `-m`, `-t`, `-x`, `-l`, `-f`, `-w`: Gợi ý các container đang chạy, tên dự án trong `~/docker/` và đường dẫn thư mục/file.
+  - `dps -c`, `-a`, `-s`, `-d`, `-p`, `-e`: Gợi ý toàn bộ container (kể cả đã dừng), tên dự án và đường dẫn.
+  - `dps -n`: Gợi ý danh sách tên Docker networks hiện có.
+  - `dps -i`: Gợi ý danh sách tên repository của Docker images.
+- **Hoàn thành đa cấp cho dự án Docker Compose (`-u` và các lệnh khác):**
+  1. **Khi đứng ngay trong thư mục chứa `docker-compose.yml`:** Bấm `Tab` sau `dps -u ` sẽ gợi ý danh sách các **service** được khai báo trong file compose đó.
+  2. **Khi đứng ở thư mục bất kỳ bên ngoài:** Bấm `Tab` sau `dps -u ` (hoặc `-r`, `-k`, `-l`, `-x`...) sẽ gợi ý tên các **dự án** nằm trong `~/docker/` (ví dụ: `homeassistant`, `dozzle`, `ci-local`...) hoặc hoàn thành đường dẫn thư mục (`~/docker/homeassistant/`).
+  3. **Gợi ý tiếp service của dự án:** Sau khi đã nhập xong tên dự án hoặc đường dẫn (ví dụ `dps -u ~/docker/homeassistant/ ` hoặc `dps -r homeassistant `), bấm `Tab` lần nữa sẽ tự động phân tích file compose của dự án đó và gợi ý từng **service** bên trong (kèm các cờ như `--force-recreate`, `--build`, `--no-deps` đối với `-u`).

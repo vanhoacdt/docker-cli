@@ -98,12 +98,6 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 - `dps -m <name_or_#>` — Force remove (`docker rm -f`) a container by name or index `#`
 - `dps -n [network_name]` — List Docker networks, subnets, gateways & connected containers
 - `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
-- `dps -u [service...]` — Run `docker compose up -d` in the current directory
-- `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
-- `dps -k <name_or_#>` — Stop (`docker stop`) a container by name or index `#`
-- `dps -m <name_or_#>` — Force remove (`docker rm -f`) a container by name or index `#`
-- `dps -n [network_name]` — List Docker networks, subnets, gateways & connected containers
-- `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
 - `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
 - `dps -w [container_name]` — Run `docker stats` directly
 - `dps -x <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)
@@ -116,3 +110,18 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 - `dps -l <name_or_#> [N]` — View last `N` log lines (default 20)
 - `dps -f <name_or_#> [N]` — Follow last `N` live log lines (default 20)
 - `dps -h` — Help
+
+## Tab Completion & Smart Target Resolution Mechanism
+
+Pressing **`Tab`** provides context-aware auto-completion across all flags from any working directory:
+
+- **Flag & Container Suggestions:** Type `dps -` + `Tab` to list all CLI options; type `dps ` + `Tab` to suggest running container names and project names inside `~/docker/`.
+- **Flag-Specific Context Completion:**
+  - `dps -r`, `-k`, `-m`, `-t`, `-x`, `-l`, `-f`, `-w`: Completes running containers, project names in `~/docker/`, and directory/file paths.
+  - `dps -c`, `-a`, `-s`, `-d`, `-p`, `-e`: Completes all containers (including stopped ones), project names, and paths.
+  - `dps -n`: Completes existing Docker network names.
+  - `dps -i`: Completes Docker image repository names.
+- **Multi-Level Compose Project Completion (`-u` and other flags):**
+  1. **Inside a directory containing `docker-compose.yml`:** Pressing `Tab` after `dps -u ` suggests the **service** names defined in that compose file.
+  2. **From any external directory:** Pressing `Tab` after `dps -u ` (or `-r`, `-k`, `-l`, `-x`, etc.) suggests **project** folder names located in `~/docker/` (e.g., `homeassistant`, `dozzle`, `ci-local`) or completes directory paths (`~/docker/homeassistant/`).
+  3. **Chained Service Completion:** Once a project name or path is entered (e.g., `dps -u ~/docker/homeassistant/ ` or `dps -r homeassistant `), pressing `Tab` again parses the target compose file and suggests its individual **services** (along with flags like `--force-recreate`, `--build`, `--no-deps` for `-u`).
