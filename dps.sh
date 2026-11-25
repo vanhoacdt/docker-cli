@@ -478,7 +478,6 @@ def render_mini_table(title, t_headers, t_rows, row_colors=None):
 
 orphan_vols = sorted([v for v in vols if v["links"] == 0], key=lambda x: -parse_bytes(x["size"]))
 if orphan_vols:
-    import sys, time
     anon_cnt = sum(1 for v in orphan_vols if re.fullmatch(r"[0-9a-f]{64}", v["name"]))
     named_cnt = len(orphan_vols) - anon_cnt
     v_rows, v_colors = [], []
@@ -490,47 +489,8 @@ if orphan_vols:
         sz_b = parse_bytes(v["size"])
         v_rows.append([str(i), disp_name, vtype, v["size"]])
         v_colors.append("\033[33m" if sz_b >= 50 * 1000**2 else "")
-
-    t_headers = ["#", "VOLUME NAME", "TYPE", "SIZE"]
-    w_cols = [max(len(x) for x in col) for col in zip(t_headers, *v_rows)]
-    term_w = shutil.get_terminal_size((180, 20)).columns
-    ovh = 1 + 3 * len(t_headers)
-    max_w = max(60, term_w - 1)
-    if sum(w_cols) + ovh > max_w:
-        avail = max(18, w_cols[1] - ((sum(w_cols) + ovh) - max_w))
-        w_cols[1] = avail
-        for r in v_rows:
-            if len(r[1]) > avail:
-                r[1] = r[1][:max(1, avail - 1)] + "…"
-
-    mk_line = lambda l, m, r: l + m.join("─" * (w + 2) for w in w_cols) + r
-    def mk_row(cols, c_code=""):
-        cells = []
-        for idx, val in enumerate(cols):
-            pad = val.ljust(w_cols[idx])
-            cells.append(f"{c_code}{pad}\033[0m" if c_code else pad)
-        return "│ " + " │ ".join(cells) + " │"
-
-    def type_print(text, delay=0.002):
-        if sys.stdout.isatty() and delay > 0:
-            for ch in text:
-                sys.stdout.write(ch)
-                sys.stdout.flush()
-                time.sleep(delay)
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-        else:
-            print(text)
-
     v_title = f"Orphan Volumes (LINKS=0): {len(orphan_vols)} ({named_cnt} named, {anon_cnt} anon) | Reclaimable: {fmt_bytes(vol_reclaim)}"
-    type_print(f"\n{v_title}", delay=0.006)
-    print(mk_line("┌", "┬", "┐"))
-    print(mk_row(t_headers))
-    print(mk_line("├", "┼", "┤"))
-
-    for j in range(len(v_rows)):
-        type_print(mk_row(v_rows[j], v_colors[j]), delay=0.0012)
-    print(mk_line("└", "┴", "┘"))
+    render_mini_table(v_title, ["#", "VOLUME NAME", "TYPE", "SIZE"], v_rows, v_colors)
 
 big_conts = sorted([c for c in conts if parse_bytes(c["size"]) > 0], key=lambda x: -parse_bytes(x["size"]))
 if big_conts:
