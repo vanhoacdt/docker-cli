@@ -69,7 +69,7 @@ _dps_completion() {
     # Gợi ý tiếp các mục tiêu chưa được chọn từ đối số thứ 2 trở đi ($cword >= 3)
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
-            -r|--restart|-k|--stop|-t|--top|-f|--follow|-w|--watch|-p)
+            -k|--stop|-t|--top|-f|--follow|-w|--watch|-p)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
                 local running filtered
@@ -79,7 +79,7 @@ _dps_completion() {
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
-            -m|--rm|-c|--inspect|-l|--logs|-a|-s|-d)
+            -r|--restart|-m|--rm|-c|--inspect|-l|--logs|-a|-s|-d)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
                 local all_c filtered
@@ -89,13 +89,26 @@ _dps_completion() {
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
-            -u|--up|-x|--exec)
+            -u|--up)
+                local svcs projs all_c filtered
+                svcs=$(_dps_find_compose_svcs "${words[2]}")
+                if [[ -n "$svcs" ]]; then
+                    filtered=$(_dps_filter_used "$svcs --force-recreate --build --no-deps")
+                    COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
+                    return 0
+                fi
+                projs=$(_dps_list_projects)
+                all_c=$(_dps_all_containers)
+                filtered=$(_dps_filter_used "$projs $all_c")
+                COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
+                [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
+                return 0
+                ;;
+            -x|--exec)
                 local svcs filtered
                 svcs=$(_dps_find_compose_svcs "${words[2]}")
                 if [[ -n "$svcs" ]]; then
-                    local extra=""
-                    [[ "${words[1]}" == "-u" || "${words[1]}" == "--up" ]] && extra="--force-recreate --build --no-deps"
-                    filtered=$(_dps_filter_used "$svcs $extra")
+                    filtered=$(_dps_filter_used "$svcs")
                     COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
                     return 0
                 fi
@@ -105,24 +118,24 @@ _dps_completion() {
 
     case "$prev" in
         -u|--up)
-            local svcs=""
+            local svcs="" projs="" all_c=""
             if [[ -f "docker-compose.yml" || -f "docker-compose.yaml" || -f "compose.yml" || -f "compose.yaml" ]]; then
                 svcs=$(docker compose config --services 2>/dev/null)
-            else
-                svcs=$(_dps_list_projects)
             fi
-            COMPREPLY=( $(compgen -W "$svcs" -- "$cur") )
+            projs=$(_dps_list_projects)
+            all_c=$(_dps_all_containers)
+            COMPREPLY=( $(compgen -W "$svcs $projs $all_c" -- "$cur") )
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
             return 0
             ;;
-        -r|--restart|-k|--stop|-t|--top|-x|--exec|-f|--follow|-w|--watch|-p)
+        -k|--stop|-t|--top|-x|--exec|-f|--follow|-w|--watch|-p)
             local running
             running=$(_dps_running_containers)
             COMPREPLY=( $(compgen -W "$running" -- "$cur") )
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
             return 0
             ;;
-        -m|--rm|-c|--inspect|-l|--logs|-a|-s|-d|-e)
+        -r|--restart|-m|--rm|-c|--inspect|-l|--logs|-a|-s|-d|-e)
             local all_c
             all_c=$(_dps_all_containers)
             COMPREPLY=( $(compgen -W "$all_c" -- "$cur") )
