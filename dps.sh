@@ -99,6 +99,13 @@ run_multi_container_action() {
     exit 1
   fi
 
+  for _chk in "$@"; do
+    if [[ "$_chk" == -* ]]; then
+      echo "Lỗi: Tham số '$_chk' không hợp lệ ở vị trí tên container/mục tiêu (lệnh $action_flag không hỗ trợ cờ này)." >&2
+      exit 1
+    fi
+  done
+
   if [[ $# -eq 2 ]] && CFILE="$(resolve_compose_context "$1")"; then
     mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "$only_run" "$2")
     if [[ ${#PROJ_CTRS[@]} -gt 0 ]]; then
@@ -227,6 +234,8 @@ if len(args) == 2:
             sys.exit(0)
 
 for item in args:
+    if item.startswith("-"):
+        raise SystemExit(f"Lỗi: Tham số '{item}' không hợp lệ ở vị trí tên container/mục tiêu.")
     cf = find_compose(item)
     if cf:
         for c in project_containers(cf):
