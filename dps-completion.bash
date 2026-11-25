@@ -31,6 +31,23 @@ _dps_list_projects() {
     fi
 }
 
+# Lọc bỏ các đối số đã xuất hiện trên dòng lệnh (từ words[2] tới words[cword-1])
+_dps_filter_used() {
+    local candidates="$1"
+    local item w skip
+    for item in $candidates; do
+        skip=0
+        for ((i=2; i<cword; i++)); do
+            w="${words[i]}"
+            if [[ "$item" == "$w" ]]; then
+                skip=1
+                break
+            fi
+        done
+        [[ $skip -eq 0 ]] && echo "$item"
+    done
+}
+
 _dps_completion() {
     local cur prev words cword
     _init_completion || return
@@ -49,34 +66,37 @@ _dps_completion() {
         return 0
     fi
 
-    # Gợi ý tiếp các mục tiêu từ đối số thứ 2 trở đi ($cword >= 3)
+    # Gợi ý tiếp các mục tiêu chưa được chọn từ đối số thứ 2 trở đi ($cword >= 3)
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
             -r|--restart|-k|--stop|-t|--top|-f|--follow|-w|--watch|-p)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
-                local running
+                local running filtered
                 running=$(_dps_running_containers)
-                COMPREPLY=( $(compgen -W "$svcs $running" -- "$cur") )
+                filtered=$(_dps_filter_used "$svcs $running")
+                COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
             -m|--rm|-c|--inspect|-l|--logs|-a|-s|-d)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
-                local all_c
+                local all_c filtered
                 all_c=$(_dps_all_containers)
-                COMPREPLY=( $(compgen -W "$svcs $all_c" -- "$cur") )
+                filtered=$(_dps_filter_used "$svcs $all_c")
+                COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
             -u|--up|-x|--exec)
-                local svcs
+                local svcs filtered
                 svcs=$(_dps_find_compose_svcs "${words[2]}")
                 if [[ -n "$svcs" ]]; then
                     local extra=""
                     [[ "${words[1]}" == "-u" || "${words[1]}" == "--up" ]] && extra="--force-recreate --build --no-deps"
-                    COMPREPLY=( $(compgen -W "$svcs $extra" -- "$cur") )
+                    filtered=$(_dps_filter_used "$svcs $extra")
+                    COMPREPLY=( $(compgen -W "$filtered" -- "$cur") )
                     return 0
                 fi
                 ;;
