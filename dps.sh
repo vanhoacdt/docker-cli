@@ -278,9 +278,9 @@ while [[ $# -gt 0 ]]; do
       TARGET_PATH="${1:-}"
       COMPOSE_FILE=""
       PROJ_DIR=""
+      AUTO_SVC=""
 
       if [[ -n "$TARGET_PATH" ]]; then
-        # Mở rộng dấu ~ nếu người dùng truyền dạng chuỗi
         EXPANDED_PATH="${TARGET_PATH/#\~/$HOME}"
         if [[ -f "$EXPANDED_PATH" ]]; then
           COMPOSE_FILE="$(realpath "$EXPANDED_PATH")"
@@ -305,11 +305,42 @@ while [[ $# -gt 0 ]]; do
             fi
           done
         fi
+
+        # Nếu vẫn chưa tìm thấy file compose, thử tra cứu ngược từ tên container (vd: dps -u mosquitto)
+        if [[ -z "$COMPOSE_FILE" ]]; then
+          IFS=$'\t' read -r _CFILE _CSVC < <(python3 - "$TARGET_PATH" <<'PY_FIND_C'
+import json, os, subprocess, sys
+t = sys.argv[1].strip().lower()
+raw_ids = subprocess.check_output(["docker", "ps", "-aq"], text=True).split()
+if not raw_ids:
+    sys.exit(0)
+for obj in json.loads(subprocess.check_output(["docker", "inspect", *raw_ids], text=True)):
+    cname = (obj.get("Name") or "").lstrip("/")
+    if cname.lower() == t:
+        labels = ((obj.get("Config") or {}).get("Labels") or {})
+        cfiles = (labels.get("com.docker.compose.project.config_files") or "").split(",")[0].strip()
+        svc = labels.get("com.docker.compose.service") or ""
+        if cfiles and os.path.isfile(cfiles):
+            print(f"{os.path.realpath(cfiles)}\t{svc}")
+            break
+PY_FIND_C
+)
+          if [[ -n "$_CFILE" ]]; then
+            COMPOSE_FILE="$_CFILE"
+            PROJ_DIR="$(dirname "$COMPOSE_FILE")"
+            AUTO_SVC="$_CSVC"
+            shift
+          fi
+        fi
       fi
 
       if [[ -n "$COMPOSE_FILE" ]]; then
-        echo ">>> Compose: $COMPOSE_FILE"
-        docker compose --project-directory "$PROJ_DIR" -f "$COMPOSE_FILE" up -d "$@"
+        echo ">>> Compose: $COMPOSE_FILE ${AUTO_SVC:+(service: $AUTO_SVC)}"
+        if [[ -n "$AUTO_SVC" ]]; then
+          docker compose --project-directory "$PROJ_DIR" -f "$COMPOSE_FILE" up -d "$AUTO_SVC" "$@"
+        else
+          docker compose --project-directory "$PROJ_DIR" -f "$COMPOSE_FILE" up -d "$@"
+        fi
         exit $?
       fi
 

@@ -31,7 +31,6 @@ _dps_list_projects() {
     fi
 }
 
-# Lọc bỏ các đối số đã xuất hiện trên dòng lệnh (từ words[2] tới words[cword-1])
 _dps_filter_used() {
     local candidates="$1"
     local item w skip
@@ -66,7 +65,6 @@ _dps_completion() {
         return 0
     fi
 
-    # Gợi ý tiếp các mục tiêu chưa được chọn từ đối số thứ 2 trở đi ($cword >= 3)
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
             -k|--stop|-t|--top|-f|--follow|-w|--watch|-p)
