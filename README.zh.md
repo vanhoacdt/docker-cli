@@ -89,26 +89,59 @@ which dps 2>/dev/null || echo "已卸载 dps"
 
 ## 使用方法
 
-- `dps [关键词]` — 查看运行中容器列表（`CONTAINER`、`STATUS`、`PORTS`、`NETWORKS`）
-- `dps -a [关键词]` — 查看所有容器（包括已停止的容器，格式与 `dps` 相同）
-- `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
-- `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
-- `dps -k <名称或#>` — 按名称或序号 `#` 停止容器（`docker stop`）
-- `dps -m <名称或#>` — 按名称或序号 `#` 强制删除容器（`docker rm -f`）
-- `dps -n [网络名称]` — 查看 Docker 网络、子网、网关及已连接的容器
-- `dps -t <名称或#>` — 查看容器内正在运行的进程（`docker top`）
-- `dps -s [-a]` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`（添加 `-a` 可同时查看已停止容器）
-- `dps -w [容器名]` — 直接运行 `docker stats`
-- `dps -x <容器> [shell]` — 打开交互式终端 `docker exec -it`（`/bin/bash` -> `/bin/sh`）
-- `dps -e [关键词]` — 实时监控 Docker 守护进程事件（`docker events`）
-- `dps -d [-a] [关键词]` — 查看 `DISK`、`VIRTUAL`、`COMPOSE FILE` 和 `MOUNTS`
-- `dps -p [关键词]` — 查看运行中容器 + 分离显示 `HOST/EXPOSE PORTS`、`NETWORKS`、`IP`、`PEER`
-- `dps -i [关键词]` — 查看 Docker 镜像列表，附带 `STATE` 和 `USED BY` 列
-- `dps -c <名称或#>` — 查看单个容器的配置、网络、挂载和 Compose 信息
-- `dps -o` — 查看 `Images`、`Containers`、`Local Volumes`、`Build Cache` 及悬空卷空间概览
-- `dps -l <名称或#> [N]` — 查看末尾 `N` 行日志（默认 20）
-- `dps -f <名称或#> [N]` — 实时跟踪末尾 `N` 行日志（默认 20）
-- `dps -h` — 查看帮助
+### 参数符号约定
+* **`[...]`（方括号）**：**可选**参数 — 可以省略。
+* **`<...>`（尖括号）**：**必填**参数 — 必须提供至少一个值。
+* **`<目标>`**：可在任意目录下灵活传入以下 **4 种格式之一**：
+  1. **容器名称**（或过滤关键词）：`mosquitto`、`wifi`
+  2. **`dps` 表格中的 `#` 序号**：`1`、`3`
+  3. **`~/docker/` 下的项目名称**：`homeassistant`、`dozzle`
+  4. **项目目录路径或 `docker-compose.yml` 文件路径**：`~/docker/homeassistant/`、`./docker-compose.yml`
+* **`[service]`**：`docker-compose.yml` 中定义的服务名（当 `<目标>` 为包含多个容器的项目时使用，例如 `~/docker/homeassistant/` 中的 `mosquitto`）。在使用 `-r`、`-k`、`-m` 时若省略此参数，则对**该项目下的所有容器**生效。
+* **`[N]`**：要显示的日志行数（省略时默认输出末尾 **`20`** 行）。
+* **`[shell]`**：在容器内启动的 Shell 路径（例如 `/bin/sh`；默认优先尝试 `/bin/bash`，不存在时自动回退至 `/bin/sh`）。
+
+---
+
+### 1. 状态查看与配置检查
+| 命令 | 参数与功能详细说明 | 实用示例 |
+| :--- | :--- | :--- |
+| `dps [目标]` | 列出运行中及 `restarting`（红色高亮）的容器。留空显示全部；传入关键词或项目路径可筛选。 | `dps`<br>`dps wifi`<br>`dps ~/docker/homeassistant/` |
+| `dps -a [目标]` | 列出**所有**容器（含已停止/异常退出），额外显示 `STATE`、`HEALTH`、`RESTART`、`DISK` 列。 | `dps -a`<br>`dps -a ~/docker/ci-local/` |
+| `dps -c <目标> [service]` | 查看单个容器的完整配置（镜像、启动命令、Compose 文件、网络、端口、挂载卷）。 | `dps -c 1`<br>`dps -c ~/docker/homeassistant/ mosquitto` |
+| `dps -h` \| `--help` | 在终端中显示快速帮助菜单。 | `dps -h` |
+
+### 2. 生命周期控制与容器交互
+| 命令 | 参数与功能详细说明 | 实用示例 |
+| :--- | :--- | :--- |
+| `dps -u [目标] [service...] [参数]` | 在当前目录执行 `docker compose up -d`，或从任意目录按路径/项目名启动指定项目及服务。 | `dps -u`<br>`dps -u dozzle`<br>`dps -u ~/docker/homeassistant/ mosquitto --force-recreate` |
+| `dps -r <目标> [service]` | 重启（`docker restart`）单个容器、指定服务或整个项目。 | `dps -r mosquitto`<br>`dps -r 2`<br>`dps -r ~/docker/homeassistant/` |
+| `dps -k <目标> [service]` | 按名称、序号 `#`、服务名或整个项目停止运行中的容器（`docker stop`）。 | `dps -k dozzle`<br>`dps -k ~/docker/homeassistant/ esphome` |
+| `dps -m <目标> [service]` | 强制停止并删除容器（`docker rm -f`）。 | `dps -m 5`<br>`dps -m ~/docker/vnc/` |
+| `dps -x <目标> [service] [shell]` | 打开容器内的交互式终端（`docker exec -it`）。 | `dps -x 1`<br>`dps -x ~/docker/homeassistant/ mosquitto /bin/sh` |
+
+### 3. 资源、进程与事件监控
+| 命令 | 参数与功能详细说明 | 实用示例 |
+| :--- | :--- | :--- |
+| `dps -s [-a] [目标]` | 查看 `CPU`、`MEM`、`RESTART`、`DISK` 资源占用（加 `-a` 包含已停止容器）。 | `dps -s`<br>`dps -s -a ~/docker/homeassistant/` |
+| `dps -w [目标] [service]` | 启动实时资源监控界面（`docker stats`），按 `Ctrl + C` 退出。 | `dps -w`<br>`dps -w ~/docker/homeassistant/` |
+| `dps -t <目标> [service]` | 查看容器内正在运行的进程（`PID`、`PPID`、`USER`、`TIME`、`COMMAND`）（`docker top`）。 | `dps -t 1`<br>`dps -t ~/docker/homeassistant/ homeassistant` |
+| `dps -e [关键词]` | 实时监听 Docker 守护进程事件（`docker events`），支持按容器名或事件关键词过滤。 | `dps -e`<br>`dps -e homeassistant` |
+
+### 4. 网络、存储与镜像检查
+| 命令 | 参数与功能详细说明 | 实用示例 |
+| :--- | :--- | :--- |
+| `dps -n [网络名称]` | 列出 Docker 网络及 `DRIVER`、`SUBNET`、`GATEWAY` 和已连接的容器。 | `dps -n`<br>`dps -n wifi-net` |
+| `dps -p [目标]` | 查看运行中容器的详细网络连接，拆分显示 `HOST/EXPOSE PORTS`、`NETWORKS`、`IP` 与 `PEER`。 | `dps -p`<br>`dps -p ~/docker/homeassistant/` |
+| `dps -d [-a] [目标]` | 查看磁盘占用（`DISK`、`VIRTUAL`）、来源 `COMPOSE FILE` 路径及 `MOUNTS` 挂载详情。 | `dps -d`<br>`dps -d -a ~/docker/nextcloud-docker/` |
+| `dps -i [关键词]` | 列出所有 Docker 镜像及其使用状态（`STATE`）和关联容器（`USED BY`）。 | `dps -i`<br>`dps -i postgres` |
+| `dps -o` | 查看 Docker 整体磁盘占用概览（`Images`、`Containers`、`Local Volumes`、`Build Cache`）及悬空卷。 | `dps -o` |
+
+### 5. 容器日志查看
+| 命令 | 参数与功能详细说明 | 实用示例 |
+| :--- | :--- | :--- |
+| `dps -l <目标> [service] [N]` | 输出最近 `N` 行日志（默认 `20` 行）并退出。 | `dps -l 1`<br>`dps -l mosquitto 50`<br>`dps -l ~/docker/homeassistant/ homeassistant 100` |
+| `dps -f <目标> [service] [N]` | 输出最近 `N` 行日志（默认 `20` 行）并持续追踪实时新日志（`--follow`）。 | `dps -f 1`<br>`dps -f ~/docker/homeassistant/ mosquitto 30` |
 
 ## Tab 自动补全与智能目标解析机制
 

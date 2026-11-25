@@ -90,26 +90,59 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 
 ## Usage
 
-- `dps [keyword]` — List running containers (`CONTAINER`, `STATUS`, `PORTS`, `NETWORKS`)
-- `dps -a [keyword]` — List all containers including stopped ones (same format as `dps`)
-- `dps -u [service...]` — Run `docker compose up -d` in the current directory
-- `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
-- `dps -k <name_or_#>` — Stop (`docker stop`) a container by name or index `#`
-- `dps -m <name_or_#>` — Force remove (`docker rm -f`) a container by name or index `#`
-- `dps -n [network_name]` — List Docker networks, subnets, gateways & connected containers
-- `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
-- `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
-- `dps -w [container_name]` — Run `docker stats` directly
-- `dps -x <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)
-- `dps -e [keyword]` — Stream real-time Docker daemon events (`docker events`)
-- `dps -d [-a] [keyword]` — View `DISK`, `VIRTUAL`, `COMPOSE FILE`, and `MOUNTS`
-- `dps -p [keyword]` — View running containers with split `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
-- `dps -i [keyword]` — List Docker images with `STATE` and `USED BY` columns
-- `dps -c <name_or_#>` — Show config, network, mount, and compose details for a single container
-- `dps -o` — Disk usage overview for `Images`, `Containers`, `Local Volumes`, `Build Cache` & orphan volumes
-- `dps -l <name_or_#> [N]` — View last `N` log lines (default 20)
-- `dps -f <name_or_#> [N]` — Follow last `N` live log lines (default 20)
-- `dps -h` — Help
+### Argument Conventions
+* **`[...]` (Square brackets)**: **Optional** argument — can be omitted.
+* **`<...>` (Angle brackets)**: **Required** argument — at least one value must be provided.
+* **`<target>`**: Accepts **any of 4 formats** from any working directory:
+  1. **Container name** (or filter keyword): `mosquitto`, `wifi`
+  2. **Row index `#`** from the `dps` table: `1`, `3`
+  3. **Project name inside `~/docker/`**: `homeassistant`, `dozzle`
+  4. **Project directory path or `docker-compose.yml` file path**: `~/docker/homeassistant/`, `./docker-compose.yml`
+* **`[service]`**: Service name defined inside `docker-compose.yml` (used when `<target>` points to a multi-container project, e.g., `mosquitto` inside `~/docker/homeassistant/`). When omitted on `-r`, `-k`, or `-m`, the action applies to **all containers** in that project.
+* **`[N]`**: Number of log lines to display (defaults to **`20`** lines if omitted).
+* **`[shell]`**: Shell binary path to launch inside the container (e.g., `/bin/sh`; defaults to trying `/bin/bash` first and falling back to `/bin/sh`).
+
+---
+
+### 1. Status & Configuration Inspection
+| Command | Arguments & Detailed Meaning | Practical Examples |
+| :--- | :--- | :--- |
+| `dps [target]` | List running containers (and `restarting` in red). Omit `<target>` to show all; pass a keyword or project path to filter. | `dps`<br>`dps wifi`<br>`dps ~/docker/homeassistant/` |
+| `dps -a [target]` | List **all** containers including stopped/exited ones, adding `STATE`, `HEALTH`, `RESTART`, and `DISK` columns. | `dps -a`<br>`dps -a ~/docker/ci-local/` |
+| `dps -c <target> [service]` | Inspect full configuration details for a single container (image, entrypoint/cmd, compose file, networks, ports, mounts). | `dps -c 1`<br>`dps -c ~/docker/homeassistant/ mosquitto` |
+| `dps -h` \| `--help` | Display the quick help reference in the terminal. | `dps -h` |
+
+### 2. Lifecycle Control & Container Access
+| Command | Arguments & Detailed Meaning | Practical Examples |
+| :--- | :--- | :--- |
+| `dps -u [target] [service...] [flags]` | Run `docker compose up -d` in the current directory, or start a project/service from any directory. | `dps -u`<br>`dps -u dozzle`<br>`dps -u ~/docker/homeassistant/ mosquitto --force-recreate` |
+| `dps -r <target> [service]` | Restart (`docker restart`) a single container, a specific service, or an entire project. | `dps -r mosquitto`<br>`dps -r 2`<br>`dps -r ~/docker/homeassistant/` |
+| `dps -k <target> [service]` | Stop (`docker stop`) a running container by name, index `#`, service, or an entire project. | `dps -k dozzle`<br>`dps -k ~/docker/homeassistant/ esphome` |
+| `dps -m <target> [service]` | Force-stop and remove container(s) (`docker rm -f`). | `dps -m 5`<br>`dps -m ~/docker/vnc/` |
+| `dps -x <target> [service] [shell]` | Open an interactive shell inside a container (`docker exec -it`). | `dps -x 1`<br>`dps -x ~/docker/homeassistant/ mosquitto /bin/sh` |
+
+### 3. Resource, Process & Event Monitoring
+| Command | Arguments & Detailed Meaning | Practical Examples |
+| :--- | :--- | :--- |
+| `dps -s [-a] [target]` | View `CPU`, `MEM`, `RESTART`, and `DISK` usage. Add `-a` to include stopped containers. | `dps -s`<br>`dps -s -a ~/docker/homeassistant/` |
+| `dps -w [target] [service]` | Launch real-time resource monitoring (`docker stats`). Press `Ctrl + C` to exit. | `dps -w`<br>`dps -w ~/docker/homeassistant/` |
+| `dps -t <target> [service]` | View running processes (`PID`, `PPID`, `USER`, `TIME`, `COMMAND`) inside a container (`docker top`). | `dps -t 1`<br>`dps -t ~/docker/homeassistant/ homeassistant` |
+| `dps -e [keyword]` | Stream real-time Docker daemon events (`docker events`). Optionally filter by container or event keyword. | `dps -e`<br>`dps -e homeassistant` |
+
+### 4. Network, Storage & Image Inspection
+| Command | Arguments & Detailed Meaning | Practical Examples |
+| :--- | :--- | :--- |
+| `dps -n [network_name]` | List Docker networks with `DRIVER`, `SUBNET`, `GATEWAY`, and connected containers. | `dps -n`<br>`dps -n wifi-net` |
+| `dps -p [target]` | View detailed network topology for running containers (`HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`). | `dps -p`<br>`dps -p ~/docker/homeassistant/` |
+| `dps -d [-a] [target]` | Inspect disk usage (`DISK`, `VIRTUAL`), source `COMPOSE FILE` path, and `MOUNTS` details. | `dps -d`<br>`dps -d -a ~/docker/nextcloud-docker/` |
+| `dps -i [keyword]` | List all Docker images with `STATE` and `USED BY` container names. | `dps -i`<br>`dps -i postgres` |
+| `dps -o` | Show overall Docker disk summary (`Images`, `Containers`, `Local Volumes`, `Build Cache`) and orphan volumes. | `dps -o` |
+
+### 5. Container Logs
+| Command | Arguments & Detailed Meaning | Practical Examples |
+| :--- | :--- | :--- |
+| `dps -l <target> [service] [N]` | Print the last `N` log lines (default `20`) and exit. | `dps -l 1`<br>`dps -l mosquitto 50`<br>`dps -l ~/docker/homeassistant/ homeassistant 100` |
+| `dps -f <target> [service] [N]` | Print the last `N` log lines (default `20`) and follow new logs in real time (`--follow`). | `dps -f 1`<br>`dps -f ~/docker/homeassistant/ mosquitto 30` |
 
 ## Tab Completion & Smart Target Resolution Mechanism
 
