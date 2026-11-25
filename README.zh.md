@@ -93,8 +93,16 @@ which dps 2>/dev/null || echo "已卸载 dps"
 - `dps -a [关键词]` — 查看所有容器（包括已停止的容器，格式与 `dps` 相同）
 - `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
 - `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
+- `dps -k <名称或#>` — 按名称或序号 `#` 停止容器（`docker stop`）
+- `dps -m <名称或#>` — 按名称或序号 `#` 强制删除容器（`docker rm -f`）
+- `dps -n [网络名称]` — 查看 Docker 网络、子网、网关及已连接的容器
+- `dps -t <名称或#>` — 查看容器内正在运行的进程（`docker top`）
 - `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
 - `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
+- `dps -k <名称或#>` — 按名称或序号 `#` 停止容器（`docker stop`）
+- `dps -m <名称或#>` — 按名称或序号 `#` 强制删除容器（`docker rm -f`）
+- `dps -n [网络名称]` — 查看 Docker 网络、子网、网关及已连接的容器
+- `dps -t <名称或#>` — 查看容器内正在运行的进程（`docker top`）
 - `dps -s [-a]` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`（添加 `-a` 可同时查看已停止容器）
 - `dps -w [容器名]` — 直接运行 `docker stats`
 - `dps -e <容器> [shell]` — 打开交互式终端 `docker exec -it`（`/bin/bash` -> `/bin/sh`）

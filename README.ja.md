@@ -94,8 +94,16 @@ which dps 2>/dev/null || echo "dps をアンインストールしました"
 - `dps -a [キーワード]` — 停止中を含むすべてのコンテナ一覧（`dps` と同じ形式）
 - `dps -u [service...]` — 現在のディレクトリで `docker compose up -d` を実行
 - `dps -r <名前または#>` — コンテナ名または番号 `#` を指定して再起動（`docker restart`）
+- `dps -k <名前または#>` — コンテナ名または番号 `#` を指定して停止（`docker stop`）
+- `dps -m <名前または#>` — コンテナ名または番号 `#` を指定して強制削除（`docker rm -f`）
+- `dps -n [ネットワーク名]` — Docker ネットワーク、サブネット、ゲートウェイ、接続中コンテナ一覧
+- `dps -t <名前または#>` — コンテナ内の実行中プロセスを表示（`docker top`）
 - `dps -u [service...]` — 現在のディレクトリで `docker compose up -d` を実行
 - `dps -r <名前または#>` — コンテナ名または番号 `#` を指定して再起動（`docker restart`）
+- `dps -k <名前または#>` — コンテナ名または番号 `#` を指定して停止（`docker stop`）
+- `dps -m <名前または#>` — コンテナ名または番号 `#` を指定して強制削除（`docker rm -f`）
+- `dps -n [ネットワーク名]` — Docker ネットワーク、サブネット、ゲートウェイ、接続中コンテナ一覧
+- `dps -t <名前または#>` — コンテナ内の実行中プロセスを表示（`docker top`）
 - `dps -s [-a]` — `CPU`、`MEM`、`RESTART`、`DISK` を表示（`-a` 追加で停止中コンテナも表示）
 - `dps -w [コンテナ名]` — `docker stats` を直接実行
 - `dps -e <container> [shell]` — 対話シェル `docker exec -it` を起動（`/bin/bash` -> `/bin/sh`）

@@ -94,8 +94,16 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 - `dps -a [keyword]` — List all containers including stopped ones (same format as `dps`)
 - `dps -u [service...]` — Run `docker compose up -d` in the current directory
 - `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
+- `dps -k <name_or_#>` — Stop (`docker stop`) a container by name or index `#`
+- `dps -m <name_or_#>` — Force remove (`docker rm -f`) a container by name or index `#`
+- `dps -n [network_name]` — List Docker networks, subnets, gateways & connected containers
+- `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
 - `dps -u [service...]` — Run `docker compose up -d` in the current directory
 - `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
+- `dps -k <name_or_#>` — Stop (`docker stop`) a container by name or index `#`
+- `dps -m <name_or_#>` — Force remove (`docker rm -f`) a container by name or index `#`
+- `dps -n [network_name]` — List Docker networks, subnets, gateways & connected containers
+- `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
 - `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
 - `dps -w [container_name]` — Run `docker stats` directly
 - `dps -e <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)

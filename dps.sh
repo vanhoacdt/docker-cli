@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; HELP_MODE=0
+SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; NET_MODE=0; HELP_MODE=0
 SORT_MODE=""; ONLY_RUNNING=1; TARGET=""; TAIL="20"
 
 get_virtual_sizes() {
@@ -21,6 +21,13 @@ while [[ $# -gt 0 ]]; do
     -d|--deploy|--mounts) DEPLOY_MODE=1 ;;
     -i|--images) IMAGE_MODE=1 ;;
     -o|--overview) OVERVIEW_MODE=1 ;;
+    -n|--net|--networks)
+      NET_MODE=1
+      if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+        shift
+        TARGET="$1"
+      fi
+      ;;
     -u|--up)
       shift
       exec docker compose up -d "$@"
@@ -47,6 +54,80 @@ else:
 print(f"Đang khởi động lại: {cname} ...")
 subprocess.run(["docker", "restart", cname], check=True)
 print(f"Đã restart xong: {cname}")
+PY
+      exit $?
+      ;;
+    -k|--stop)
+      shift
+      TARGET_K="${1:-}"
+      [[ -z "$TARGET_K" ]] && { echo "Dùng: dps -k <tên_hoặc_#>" >&2; exit 1; }
+      TARGET="$TARGET_K" python3 - <<'PY'
+import os, subprocess
+target = os.environ.get("TARGET", "").strip()
+raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào.")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    exact = [n for n in names if n.lower() == target.lower()]
+    matches = exact or [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    cname = matches[0]
+print(f"Đang dừng container: {cname} ...")
+subprocess.run(["docker", "stop", cname], check=True)
+print(f"Đã stop: {cname}")
+PY
+      exit $?
+      ;;
+    -m|--rm|--remove)
+      shift
+      TARGET_M="${1:-}"
+      [[ -z "$TARGET_M" ]] && { echo "Dùng: dps -m <tên_hoặc_#>" >&2; exit 1; }
+      TARGET="$TARGET_M" python3 - <<'PY'
+import os, subprocess
+target = os.environ.get("TARGET", "").strip()
+raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào.")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    exact = [n for n in names if n.lower() == target.lower()]
+    matches = exact or [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    cname = matches[0]
+print(f"Đang xóa container (rm -f): {cname} ...")
+subprocess.run(["docker", "rm", "-f", cname], check=True)
+print(f"Đã xóa: {cname}")
+PY
+      exit $?
+      ;;
+    -t|--top)
+      shift
+      TARGET_T="${1:-}"
+      [[ -z "$TARGET_T" ]] && { echo "Dùng: dps -t <tên_hoặc_#>" >&2; exit 1; }
+      TARGET="$TARGET_T" python3 - <<'PY'
+import os, subprocess
+target = os.environ.get("TARGET", "").strip()
+raw = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào đang chạy.")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    exact = [n for n in names if n.lower() == target.lower()]
+    matches = exact or [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container đang chạy khớp: {target}")
+    cname = matches[0]
+print(f"=== TOP: {cname} ===")
+subprocess.run(["docker", "top", cname], check=True)
 PY
       exit $?
       ;;
@@ -117,6 +198,10 @@ Cách dùng:
   dps -a [từ_khóa]                Xem toàn bộ container kể cả đã dừng (format như dps)
   dps -u [service...]             Chạy docker compose up -d ở thư mục hiện tại
   dps -r <tên_hoặc_#>             Khởi động lại (docker restart) container theo tên hoặc số thứ tự #
+  dps -k <tên_hoặc_#>             Dừng (docker stop) container theo tên hoặc số thứ tự #
+  dps -m <tên_hoặc_#>             Dừng và xóa (docker rm -f) container theo tên hoặc số thứ tự #
+  dps -n [tên_mạng]               Xem danh sách Docker networks, subnet, gateway & container đang kết nối
+  dps -t <tên_hoặc_#>             Xem các tiến trình đang chạy trong container (docker top)
   dps -s [-a]                     Xem CPU, MEM, RESTART, DISK của container (thêm -a để xem cả container dừng)
   dps -w [tên_container]          Chạy trực tiếp giao diện docker stats
   dps -e <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
@@ -129,6 +214,79 @@ Cách dùng:
   dps -f <tên_hoặc_#> [N]         Xem N dòng log trực tiếp (mặc định 20) theo tên hoặc số thứ tự #
   dps -h | --help                 Hiển thị trợ giúp này
 HELP_EOF
+  exit 0
+fi
+
+if [[ "$NET_MODE" == "1" ]]; then
+  FILTER="$TARGET" python3 - <<'PY'
+import json, os, shutil, subprocess
+
+flt = os.environ.get("FILTER", "").strip().lower()
+raw_ids = subprocess.check_output(["docker", "network", "ls", "-q"], text=True).splitlines()
+n_ids = [x.strip() for x in raw_ids if x.strip()]
+if not n_ids:
+    raise SystemExit("Không có Docker network nào.")
+
+insp = json.loads(subprocess.check_output(["docker", "network", "inspect", *n_ids], text=True))
+rows = []
+for net in insp:
+    name = (net.get("Name") or "-").strip()
+    driver = (net.get("Driver") or "-").strip()
+    scope = (net.get("Scope") or "-").strip()
+    ipam_cfg = ((net.get("IPAM") or {}).get("Config") or [])
+    subnets, gateways = [], []
+    for cfg in ipam_cfg:
+        if cfg.get("Subnet"): subnets.append(cfg["Subnet"])
+        if cfg.get("Gateway"): gateways.append(cfg["Gateway"])
+    sub_s = ", ".join(subnets) if subnets else "-"
+    gw_s = ", ".join(gateways) if gateways else "-"
+    conts = net.get("Containers") or {}
+    c_items = []
+    for _, cinfo in sorted(conts.items(), key=lambda kv: (kv[1].get("Name") or "").lower()):
+        cname = (cinfo.get("Name") or "-").strip()
+        cip = ((cinfo.get("IPv4Address") or "").split("/")[0]).strip()
+        c_items.append(f"{cname} ({cip})" if cip else cname)
+    cont_s = ", ".join(c_items) if c_items else "-"
+    prio = 0 if name == "wifi-net" else (1 if name == "ci-local_default" else (2 if name not in ("bridge", "host", "none") else 3))
+    search_blob = f"{name} {driver} {scope} {sub_s} {gw_s} {cont_s}".lower()
+    if not flt or flt in search_blob:
+        rows.append((prio, name, driver, sub_s, gw_s, cont_s, len(c_items) > 0))
+
+rows.sort(key=lambda r: (r[0], r[1].lower()))
+headers = ["#", "NETWORK", "DRIVER", "SUBNET", "GATEWAY", "CONTAINERS"]
+table = [[str(i), r[1], r[2], r[3], r[4], r[5]] for i, r in enumerate(rows, 1)]
+
+if not table:
+    print("Không có network nào khớp.")
+    raise SystemExit(0)
+
+widths = [max(len(x) for x in col) for col in zip(headers, *table)]
+term_cols = shutil.get_terminal_size((180, 20)).columns
+overhead = 1 + 3 * len(headers)
+max_total = max(60, term_cols - 1)
+if sum(widths) + overhead > max_total:
+    avail = max(16, widths[-1] - ((sum(widths) + overhead) - max_total))
+    widths[-1] = avail
+    for row in table:
+        if len(row[-1]) > avail:
+            row[-1] = row[-1][:max(1, avail - 1)] + "…"
+
+line_fn = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+def fmt_row(cols, col_code=""):
+    cells = []
+    for idx, val in enumerate(cols):
+        pad = val.ljust(widths[idx])
+        cells.append(f"{col_code}{pad}\033[0m" if col_code else pad)
+    return "│ " + " │ ".join(cells) + " │"
+
+print(line_fn("┌", "┬", "┐"))
+print(fmt_row(headers))
+print(line_fn("├", "┼", "┤"))
+for r, raw_r in zip(table, rows):
+    c_code = "\033[36m" if raw_r[6] else ""
+    print(fmt_row(r, c_code))
+print(line_fn("└", "┴", "┘"))
+PY
   exit 0
 fi
 

@@ -14,13 +14,17 @@ _dps_compose_services() {
   docker compose config --services 2>/dev/null | sort -f
 }
 
+_dps_network_names() {
+  docker network ls --format '{{.Name}}' 2>/dev/null | sort -f
+}
+
 _dps_completions() {
   local cur first idx
   cur="${COMP_WORDS[COMP_CWORD]}"
   first="${COMP_WORDS[1]:-}"
   idx="${COMP_CWORD}"
 
-  local short_opts="-a -u -r -s -w -e -d -p -i -c -o -l -f -h"
+  local short_opts="-a -u -r -k -m -n -t -s -w -e -d -p -i -c -o -l -f -h"
 
   if [[ "$idx" -eq 1 ]]; then
     if [[ -z "$cur" || "$cur" == -* ]]; then
@@ -37,9 +41,25 @@ _dps_completions() {
   fi
 
   case "$first" in
-    -a|--all)
+    -a|--all|-r|--restart|-m|--rm|--remove)
       if [[ "$idx" -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
+    -k|--stop|-t|--top)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
+    -n|--net|--networks)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_network_names)" -- "$cur") )
       else
         COMPREPLY=()
       fi
@@ -47,14 +67,6 @@ _dps_completions() {
       ;;
     -u|--up)
       COMPREPLY=( $(compgen -W "$(_dps_compose_services)" -- "$cur") )
-      return 0
-      ;;
-    -r|--restart)
-      if [[ "$idx" -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
-      else
-        COMPREPLY=()
-      fi
       return 0
       ;;
     -e|--exec)

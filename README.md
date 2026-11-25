@@ -95,8 +95,16 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 - `dps -a [từ_khóa]` — Danh sách toàn bộ container kể cả đã dừng (format như `dps`)
 - `dps -u [service...]` — Chạy `docker compose up -d` ở thư mục hiện tại
 - `dps -r <tên_hoặc_#>` — Khởi động lại (`docker restart`) container theo tên hoặc số thứ tự `#`
+- `dps -k <tên_hoặc_#>` — Dừng (`docker stop`) container theo tên hoặc số thứ tự `#`
+- `dps -m <tên_hoặc_#>` — Dừng và xóa (`docker rm -f`) container theo tên hoặc số thứ tự `#`
+- `dps -n [tên_mạng]` — Xem danh sách Docker networks, subnet, gateway & container đang kết nối
+- `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
 - `dps -u [service...]` — Chạy `docker compose up -d` ở thư mục hiện tại
 - `dps -r <tên_hoặc_#>` — Khởi động lại (`docker restart`) container theo tên hoặc số thứ tự `#`
+- `dps -k <tên_hoặc_#>` — Dừng (`docker stop`) container theo tên hoặc số thứ tự `#`
+- `dps -m <tên_hoặc_#>` — Dừng và xóa (`docker rm -f`) container theo tên hoặc số thứ tự `#`
+- `dps -n [tên_mạng]` — Xem danh sách Docker networks, subnet, gateway & container đang kết nối
+- `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
 - `dps -s [-a]` — Xem `CPU`, `MEM`, `RESTART`, `DISK` (thêm `-a` để xem cả container đã dừng)
 - `dps -w [tên_container]` — Chạy trực tiếp `docker stats`
 - `dps -e <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
