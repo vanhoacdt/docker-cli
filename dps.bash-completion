@@ -16,13 +16,13 @@ _dps_completions() {
   first="${COMP_WORDS[1]:-}"
   idx="${COMP_CWORD}"
 
-  local short_opts="-s -w -e -d -p -i -c -o -l -f -h"
+  local short_opts="-a -s -w -e -d -p -i -c -o -l -f -h"
 
   if [[ "$idx" -eq 1 ]]; then
     if [[ -z "$cur" || "$cur" == -* ]]; then
       COMPREPLY=( $(compgen -W "$short_opts" -- "$cur") )
     else
-      COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )
     fi
     return 0
   fi
@@ -33,6 +33,14 @@ _dps_completions() {
   fi
 
   case "$first" in
+    -a|--all)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_container_names)" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
     -e|--exec)
       if [[ "$idx" -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )

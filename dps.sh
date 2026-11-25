@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; HELP_MODE=0
-SORT_MODE=""; ONLY_RUNNING=0; TARGET=""; TAIL="20"
+SORT_MODE=""; ONLY_RUNNING=1; TARGET=""; TAIL="20"
 
 get_virtual_sizes() {
   docker ps -a -s --format '{{.Names}}	{{.Size}}' 2>/dev/null | awk -F'	' '{
@@ -15,6 +15,7 @@ get_virtual_sizes() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) HELP_MODE=1 ;;
+    -a|--all) ONLY_RUNNING=0 ;;
     -s|--stats) SHOW_STATS=1 ;;
     -p|--ports|--full-ports) FULL_PORTS=1 ;;
     -d|--deploy|--mounts) DEPLOY_MODE=1 ;;
@@ -83,11 +84,12 @@ if [[ "$HELP_MODE" == "1" ]]; then
 dps - Trình xem nhanh trạng thái Docker container, image & hệ thống (Debian 12)
 
 Cách dùng:
-  dps [từ_khóa]                   Xem toàn bộ container (CONTAINER, STATUS, RESTART, DISK, PORTS, NETWORKS)
-  dps -s                          Xem tất cả CPU, MEM, RESTART, DISK của container
-  dps -w [tên_container]            Chạy trực tiếp giao diện docker stats
+  dps [từ_khóa]                   Xem container đang chạy (CONTAINER, STATUS, RESTART, DISK, PORTS, NETWORKS)
+  dps -a [từ_khóa]                Xem toàn bộ container kể cả đã dừng (format như dps)
+  dps -s [-a]                     Xem CPU, MEM, RESTART, DISK của container (thêm -a để xem cả container dừng)
+  dps -w [tên_container]          Chạy trực tiếp giao diện docker stats
   dps -e <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
-  dps -d [từ_khóa]                Xem DISK, COMPOSE FILE và MOUNTS (phân chia đường kẻ từng container) (kèm VIRTUAL)
+  dps -d [-a] [từ_khóa]           Xem DISK, COMPOSE FILE và MOUNTS (phân chia đường kẻ từng container) (kèm VIRTUAL)
   dps -p [từ_khóa]                Xem container đang chạy + tách HOST/EXPOSE PORTS, NETWORKS, IP, PEER
   dps -i [từ_khóa]                Xem danh sách Docker image kèm cột STATE và USED BY
   dps -c <tên_hoặc_#>             Xem gọn cấu hình, network, mount và compose của 1 container
