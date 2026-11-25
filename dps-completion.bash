@@ -1,3 +1,11 @@
+_dps_running_containers() {
+    docker ps --filter "status=running" --filter "status=restarting" --format "{{.Names}}" 2>/dev/null
+}
+
+_dps_all_containers() {
+    docker ps -a --format "{{.Names}}" 2>/dev/null
+}
+
 _dps_find_compose_svcs() {
     local target="${1/#\~/$HOME}"
     local cfile=""
@@ -19,7 +27,7 @@ _dps_find_compose_svcs() {
 
 _dps_list_projects() {
     if [[ -d "$HOME/docker" ]]; then
-        find "$HOME/docker" -maxdepth 2 \( -name "docker-compose.yml" -o -name "compose.yml" \) -printf '%h\n' 2>/dev/null | xargs -r -n1 basename
+        find "$HOME/docker" -maxdepth 2 \( -name "docker-compose.yml" -o -name "compose.yml" \) -printf "%h\n" 2>/dev/null | xargs -r -n1 basename
     fi
 }
 
@@ -33,25 +41,32 @@ _dps_completion() {
         if [[ "$cur" == -* ]]; then
             COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
         else
-            local running projs
-            running=$(docker ps --format '{{.Names}}' 2>/dev/null)
-            projs=$(_dps_list_projects)
-            COMPREPLY=( $(compgen -W "$opts $running $projs" -- "$cur") )
+            local running
+            running=$(_dps_running_containers)
+            COMPREPLY=( $(compgen -W "$opts $running" -- "$cur") )
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
         fi
         return 0
     fi
 
-    # Gợi ý service của dự án khi đã nhập đường dẫn / tên dự án ở vị trí tham số trước đó
+    # Gợi ý tiếp các container đang chạy / restarting khi dùng hàng loạt (-k, -r) hoặc tất cả container (-m)
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
-            -r|--restart|-k|--stop|-m|--rm)
+            -r|--restart|-k|--stop)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
-                local running projs
-                running=$(docker ps --format "{{.Names}}" 2>/dev/null)
-                projs=$(_dps_list_projects)
-                COMPREPLY=( $(compgen -W "$svcs $running $projs" -- "$cur") )
+                local running
+                running=$(_dps_running_containers)
+                COMPREPLY=( $(compgen -W "$svcs $running" -- "$cur") )
+                [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
+                return 0
+                ;;
+            -m|--rm)
+                local svcs=""
+                [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
+                local all_c
+                all_c=$(_dps_all_containers)
+                COMPREPLY=( $(compgen -W "$svcs $all_c" -- "$cur") )
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
@@ -80,31 +95,29 @@ _dps_completion() {
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
             return 0
             ;;
-        -r|--restart|-k|--stop|-m|--rm|-t|--top|-x|--exec|-l|--logs|-f|--follow|-w|--watch)
-            local running projs
-            running=$(docker ps --format '{{.Names}}' 2>/dev/null)
-            projs=$(_dps_list_projects)
-            COMPREPLY=( $(compgen -W "$running $projs" -- "$cur") )
+        -r|--restart|-k|--stop|-t|--top|-x|--exec|-f|--follow|-w|--watch|-p)
+            local running
+            running=$(_dps_running_containers)
+            COMPREPLY=( $(compgen -W "$running" -- "$cur") )
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
             return 0
             ;;
-        -c|--inspect|-a|-s|-d|-p|-e)
-            local all_c projs
-            all_c=$(docker ps -a --format '{{.Names}}' 2>/dev/null)
-            projs=$(_dps_list_projects)
-            COMPREPLY=( $(compgen -W "$all_c $projs" -- "$cur") )
+        -m|--rm|-c|--inspect|-l|--logs|-a|-s|-d|-e)
+            local all_c
+            all_c=$(_dps_all_containers)
+            COMPREPLY=( $(compgen -W "$all_c" -- "$cur") )
             [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
             return 0
             ;;
         -n|--network)
             local nets
-            nets=$(docker network ls --format '{{.Name}}' 2>/dev/null)
+            nets=$(docker network ls --format "{{.Name}}" 2>/dev/null)
             COMPREPLY=( $(compgen -W "$nets" -- "$cur") )
             return 0
             ;;
         -i|--images)
             local imgs
-            imgs=$(docker images --format '{{.Repository}}' 2>/dev/null | grep -v '^<none>$')
+            imgs=$(docker images --format "{{.Repository}}" 2>/dev/null | grep -v "^<none>$")
             COMPREPLY=( $(compgen -W "$imgs" -- "$cur") )
             return 0
             ;;
