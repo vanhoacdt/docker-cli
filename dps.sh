@@ -12,6 +12,80 @@ get_virtual_sizes() {
   }'
 }
 
+
+# === Helper phân giải đường dẫn dự án / file docker-compose.yml ===
+resolve_compose_context() {
+  local raw="${1:-}"
+  [[ -z "$raw" ]] && return 1
+  local exp="${raw/#\~/$HOME}"
+  local cfile=""
+  if [[ -f "$exp" ]]; then
+    cfile="$(realpath "$exp")"
+  elif [[ -d "$exp" ]]; then
+    for cf in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+      if [[ -f "$exp/$cf" ]]; then
+        cfile="$(realpath "$exp/$cf")"
+        break
+      fi
+    done
+  elif [[ "$raw" == */* || "$raw" == ~* || "$raw" == .* ]]; then
+    return 1
+  elif [[ -d "$HOME/docker/$raw" ]]; then
+    # Chỉ ưu tiên tên thư mục ~/docker/<raw> nếu không trùng tên container cụ thể đang tồn tại
+    if ! docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "$raw"; then
+      for cf in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+        if [[ -f "$HOME/docker/$raw/$cf" ]]; then
+          cfile="$(realpath "$HOME/docker/$raw/$cf")"
+          break
+        fi
+      done
+    fi
+  fi
+  [[ -n "$cfile" ]] && { echo "$cfile"; return 0; }
+  return 1
+}
+
+get_project_containers() {
+  local cfile="$1"
+  local only_run="${2:-0}"
+  local filter_svc="${3:-}"
+  python3 - "$cfile" "$only_run" "$filter_svc" <<'PY_PROJ'
+import json, os, subprocess, sys
+
+cfile = os.path.realpath(sys.argv[1])
+pdir = os.path.dirname(cfile)
+only_run = sys.argv[2] == "1"
+filter_svc = sys.argv[3].strip().lower()
+
+raw_ids = subprocess.check_output(["docker", "ps", "-aq"], text=True).split()
+if not raw_ids:
+    sys.exit(0)
+
+insp = json.loads(subprocess.check_output(["docker", "inspect", *raw_ids], text=True))
+matched = []
+for obj in insp:
+    st = obj.get("State") or {}
+    if only_run and (st.get("Status") or "").lower() not in ("running", "restarting"):
+        continue
+    cfg = obj.get("Config") or {}
+    labels = cfg.get("Labels") or {}
+    wdir = labels.get("com.docker.compose.project.working_dir") or ""
+    cfiles = labels.get("com.docker.compose.project.config_files") or ""
+    svc = (labels.get("com.docker.compose.service") or "").lower()
+    name = (obj.get("Name") or "").lstrip("/")
+
+    cfile_list = [os.path.realpath(x.strip()) for x in cfiles.split(",") if x.strip()]
+    if cfile in cfile_list or (wdir and os.path.realpath(wdir) == pdir):
+        if filter_svc and filter_svc not in (svc, name.lower()):
+            continue
+        matched.append((name, svc))
+
+matched.sort(key=lambda x: x[0].lower())
+for name, _ in matched:
+    print(name)
+PY_PROJ
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) HELP_MODE=1 ;;
@@ -37,9 +111,64 @@ while [[ $# -gt 0 ]]; do
       ;;
     -u|--up)
       shift
-      exec docker compose up -d "$@"
+      TARGET_PATH="${1:-}"
+      COMPOSE_FILE=""
+      PROJ_DIR=""
+
+      if [[ -n "$TARGET_PATH" ]]; then
+        # Mở rộng dấu ~ nếu người dùng truyền dạng chuỗi
+        EXPANDED_PATH="${TARGET_PATH/#\~/$HOME}"
+        if [[ -f "$EXPANDED_PATH" ]]; then
+          COMPOSE_FILE="$(realpath "$EXPANDED_PATH")"
+          PROJ_DIR="$(dirname "$COMPOSE_FILE")"
+          shift
+        elif [[ -d "$EXPANDED_PATH" ]]; then
+          for cf in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+            if [[ -f "$EXPANDED_PATH/$cf" ]]; then
+              COMPOSE_FILE="$(realpath "$EXPANDED_PATH/$cf")"
+              PROJ_DIR="$(dirname "$COMPOSE_FILE")"
+              shift
+              break
+            fi
+          done
+        elif [[ ! -f "docker-compose.yml" && ! -f "docker-compose.yaml" && ! -f "compose.yml" && ! -f "compose.yaml" && -d "$HOME/docker/$TARGET_PATH" ]]; then
+          for cf in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+            if [[ -f "$HOME/docker/$TARGET_PATH/$cf" ]]; then
+              COMPOSE_FILE="$(realpath "$HOME/docker/$TARGET_PATH/$cf")"
+              PROJ_DIR="$(dirname "$COMPOSE_FILE")"
+              shift
+              break
+            fi
+          done
+        fi
+      fi
+
+      if [[ -n "$COMPOSE_FILE" ]]; then
+        echo ">>> Compose: $COMPOSE_FILE"
+        docker compose --project-directory "$PROJ_DIR" -f "$COMPOSE_FILE" up -d "$@"
+        exit $?
+      fi
+
+      docker compose up -d "$@"
+      exit $?
       ;;
     -r|--restart)
+      shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -r <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG="${1:-}"
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "0" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không tìm thấy container phù hợp trong dự án: $CFILE" >&2
+          exit 1
+        fi
+        for c in "${PROJ_CTRS[@]}"; do
+          docker restart "$c" >/dev/null && echo "Đã restart: $c"
+        done
+        exit 0
+      fi
       shift
       TARGET_R="${1:-}"
       [[ -z "$TARGET_R" ]] && { echo "Dùng: dps -r <tên_hoặc_#>" >&2; exit 1; }
@@ -65,6 +194,22 @@ PY
       exit $?
       ;;
     -k|--stop)
+      shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -k <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG="${1:-}"
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không tìm thấy container phù hợp trong dự án: $CFILE" >&2
+          exit 1
+        fi
+        for c in "${PROJ_CTRS[@]}"; do
+          docker stop "$c" >/dev/null && echo "Đã dừng: $c"
+        done
+        exit 0
+      fi
       shift
       TARGET_K="${1:-}"
       [[ -z "$TARGET_K" ]] && { echo "Dùng: dps -k <tên_hoặc_#>" >&2; exit 1; }
@@ -115,6 +260,23 @@ PY
       exit $?
       ;;
     -t|--top)
+      shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -t <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG="${1:-}"
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không tìm thấy container trong dự án: $CFILE" >&2
+          exit 1
+        elif [[ ${#PROJ_CTRS[@]} -gt 1 ]]; then
+          echo "Dự án có nhiều container, hãy chỉ định thêm tên service:" >&2
+          printf "  - %s\n" "${PROJ_CTRS[@]}" >&2
+          exit 1
+        fi
+        set -- "${PROJ_CTRS[0]}"
+      fi
       shift
       TARGET_T="${1:-}"
       [[ -z "$TARGET_T" ]] && { echo "Dùng: dps -t <tên_hoặc_#>" >&2; exit 1; }
@@ -191,6 +353,37 @@ PY
       ;;
     -x|--exec)
       shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -x <tên_hoặc_#_hoặc_đường_dẫn> [service] [shell]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG=""
+        SHELL_ARG=""
+        if [[ -n "${1:-}" ]]; then
+          if [[ "$1" == /* ]]; then
+            SHELL_ARG="$1"
+          else
+            SVC_ARG="$1"
+            SHELL_ARG="${2:-}"
+          fi
+        fi
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không có container đang chạy trong dự án: $CFILE" >&2
+          exit 1
+        elif [[ ${#PROJ_CTRS[@]} -gt 1 ]]; then
+          echo "Dự án có nhiều container đang chạy, hãy chỉ định thêm tên service:" >&2
+          printf "  - %s\n" "${PROJ_CTRS[@]}" >&2
+          exit 1
+        fi
+        TARGET_C="${PROJ_CTRS[0]}"
+        if [[ -n "$SHELL_ARG" ]]; then
+          exec docker exec -it "$TARGET_C" "$SHELL_ARG"
+        fi
+        docker exec -it "$TARGET_C" /bin/bash 2>/dev/null || exec docker exec -it "$TARGET_C" /bin/sh
+        exit $?
+      fi
+      shift
       c="${1:-}"
       [[ -z "$c" ]] && { echo "Dùng: dps -x <tên_hoặc_id_container> [shell]" >&2; exit 1; }
       sh_bin="${2:-/bin/bash}"
@@ -200,6 +393,12 @@ PY
       exec docker exec -it "$c" "$sh_bin"
       ;;
     -w|--watch)
+      shift
+      if [[ -n "${1:-}" ]] && CFILE="$(resolve_compose_context "$1")"; then
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "${2:-}")
+        [[ ${#PROJ_CTRS[@]} -eq 0 ]] && { echo "Không có container đang chạy trong dự án: $CFILE" >&2; exit 1; }
+        exec docker stats "${PROJ_CTRS[@]}"
+      fi
       shift
       exec docker stats "$@"
       ;;
@@ -211,6 +410,32 @@ PY
       fi
       ;;
     -l|--logs)
+      shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -l <tên_hoặc_#_hoặc_đường_dẫn> [service] [N]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG=""
+        LINES_N="20"
+        if [[ -n "${1:-}" ]]; then
+          if [[ "$1" =~ ^[0-9]+$ ]]; then
+            LINES_N="$1"
+          else
+            SVC_ARG="$1"
+            [[ "${2:-}" =~ ^[0-9]+$ ]] && LINES_N="$2"
+          fi
+        fi
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "0" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không tìm thấy container trong dự án: $CFILE" >&2
+          exit 1
+        elif [[ ${#PROJ_CTRS[@]} -gt 1 ]]; then
+          echo "Dự án có nhiều container, hãy chỉ định thêm tên service:" >&2
+          printf "  - %s\n" "${PROJ_CTRS[@]}" >&2
+          exit 1
+        fi
+        exec docker logs  --tail "$LINES_N" "${PROJ_CTRS[0]}"
+      fi
       LOG_MODE=1
       if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
         shift
@@ -222,6 +447,32 @@ PY
       fi
       ;;
     -f|--follow)
+      shift
+      TARGET_ARG="${1:-}"
+      [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -f <tên_hoặc_#_hoặc_đường_dẫn> [service] [N]" >&2; exit 1; }
+      if CFILE="$(resolve_compose_context "$TARGET_ARG")"; then
+        shift
+        SVC_ARG=""
+        LINES_N="20"
+        if [[ -n "${1:-}" ]]; then
+          if [[ "$1" =~ ^[0-9]+$ ]]; then
+            LINES_N="$1"
+          else
+            SVC_ARG="$1"
+            [[ "${2:-}" =~ ^[0-9]+$ ]] && LINES_N="$2"
+          fi
+        fi
+        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "0" "$SVC_ARG")
+        if [[ ${#PROJ_CTRS[@]} -eq 0 ]]; then
+          echo "Không tìm thấy container trong dự án: $CFILE" >&2
+          exit 1
+        elif [[ ${#PROJ_CTRS[@]} -gt 1 ]]; then
+          echo "Dự án có nhiều container, hãy chỉ định thêm tên service:" >&2
+          printf "  - %s\n" "${PROJ_CTRS[@]}" >&2
+          exit 1
+        fi
+        exec docker logs -f --tail "$LINES_N" "${PROJ_CTRS[0]}"
+      fi
       FOLLOW_MODE=1
       if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
         shift
