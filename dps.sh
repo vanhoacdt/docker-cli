@@ -447,18 +447,66 @@ print(line_fn("├", "┼", "┤"))
 for r in summary_rows: print(fmt_row(r))
 print(line_fn("└", "┴", "┘"))
 
+def render_mini_table(title, t_headers, t_rows, row_colors=None):
+    if not t_rows:
+        return
+    print(f"\n{title}")
+    w_cols = [max(len(x) for x in col) for col in zip(t_headers, *t_rows)]
+    term_w = shutil.get_terminal_size((180, 20)).columns
+    ovh = 1 + 3 * len(t_headers)
+    max_w = max(60, term_w - 1)
+    if sum(w_cols) + ovh > max_w and len(w_cols) >= 2:
+        avail = max(18, w_cols[1] - ((sum(w_cols) + ovh) - max_w))
+        w_cols[1] = avail
+        for r in t_rows:
+            if len(r[1]) > avail:
+                r[1] = r[1][:max(1, avail - 1)] + "…"
+    mk_line = lambda l, m, r: l + m.join("─" * (w + 2) for w in w_cols) + r
+    def mk_row(cols, c_code=""):
+        cells = []
+        for idx, val in enumerate(cols):
+            pad = val.ljust(w_cols[idx])
+            cells.append(f"{c_code}{pad}\033[0m" if c_code else pad)
+        return "│ " + " │ ".join(cells) + " │"
+    print(mk_line("┌", "┬", "┐"))
+    print(mk_row(t_headers))
+    print(mk_line("├", "┼", "┤"))
+    for idx, r in enumerate(t_rows):
+        cc = row_colors[idx] if (row_colors and idx < len(row_colors)) else ""
+        print(mk_row(r, cc))
+    print(mk_line("└", "┴", "┘"))
+
 orphan_vols = sorted([v for v in vols if v["links"] == 0], key=lambda x: -parse_bytes(x["size"]))
-print(f"\nOrphan Volumes (LINKS=0): {len(orphan_vols)} | Reclaimable: {fmt_bytes(vol_reclaim)}")
-for v in orphan_vols[:8]:
-    print(f"  - {v['name']} ({v['size']})")
-if len(orphan_vols) > 8:
-    print(f"  ... và {len(orphan_vols) - 8} volume khác")
+if orphan_vols:
+    anon_cnt = sum(1 for v in orphan_vols if re.fullmatch(r"[0-9a-f]{64}", v["name"]))
+    named_cnt = len(orphan_vols) - anon_cnt
+    v_rows, v_colors = [], []
+    for i, v in enumerate(orphan_vols, 1):
+        vname = v["name"]
+        is_anon = bool(re.fullmatch(r"[0-9a-f]{64}", vname))
+        disp_name = f"{vname[:12]}…{vname[-6:]}" if is_anon else vname
+        vtype = "anon (hash)" if is_anon else "named"
+        sz_b = parse_bytes(v["size"])
+        v_rows.append([str(i), disp_name, vtype, v["size"]])
+        v_colors.append("\033[33m" if sz_b >= 50 * 1000**2 else "")
+    v_title = f"Orphan Volumes (LINKS=0): {len(orphan_vols)} ({named_cnt} named, {anon_cnt} anon) | Reclaimable: {fmt_bytes(vol_reclaim)}"
+    render_mini_table(v_title, ["#", "VOLUME NAME", "TYPE", "SIZE"], v_rows, v_colors)
 
 big_conts = sorted([c for c in conts if parse_bytes(c["size"]) > 0], key=lambda x: -parse_bytes(x["size"]))
 if big_conts:
-    print("\nContainer Writable Layer (>0B):")
-    for c in big_conts:
-        print(f"  - {c['name']}: {c['size']} ({c['status']})")
+    c_rows, c_colors = [], []
+    for i, c in enumerate(big_conts, 1):
+        st_str = c["status"]
+        st_low = st_str.lower()
+        if st_low.startswith("up"):
+            state_lbl, cc = "running", "\033[36m"
+        elif re.search(r"exited \([1-9][0-9]*\)", st_low):
+            state_lbl, cc = "error", "\033[31m"
+        else:
+            state_lbl, cc = "stopped", "\033[90m"
+        c_rows.append([str(i), c["name"], c["size"], state_lbl, st_str])
+        c_colors.append(cc)
+    render_mini_table(f"Container Writable Layer (>0B): {len(big_conts)} containers", ["#", "CONTAINER", "WRITABLE", "STATE", "STATUS"], c_rows, c_colors)
 PY
   exit 0
 fi
