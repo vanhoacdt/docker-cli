@@ -92,6 +92,10 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 
 - `dps [keyword]` — List running containers (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
 - `dps -a [keyword]` — List all containers including stopped ones (same format as `dps`)
+- `dps -u [service...]` — Run `docker compose up -d` in the current directory
+- `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
+- `dps -u [service...]` — Run `docker compose up -d` in the current directory
+- `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`
 - `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
 - `dps -w [container_name]` — Run `docker stats` directly
 - `dps -e <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)

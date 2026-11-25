@@ -92,6 +92,10 @@ which dps 2>/dev/null || echo "dps をアンインストールしました"
 
 - `dps [キーワード]` — 稼働中コンテナ一覧（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
 - `dps -a [キーワード]` — 停止中を含むすべてのコンテナ一覧（`dps` と同じ形式）
+- `dps -u [service...]` — 現在のディレクトリで `docker compose up -d` を実行
+- `dps -r <名前または#>` — コンテナ名または番号 `#` を指定して再起動（`docker restart`）
+- `dps -u [service...]` — 現在のディレクトリで `docker compose up -d` を実行
+- `dps -r <名前または#>` — コンテナ名または番号 `#` を指定して再起動（`docker restart`）
 - `dps -s [-a]` — `CPU`、`MEM`、`RESTART`、`DISK` を表示（`-a` 追加で停止中コンテナも表示）
 - `dps -w [コンテナ名]` — `docker stats` を直接実行
 - `dps -e <container> [shell]` — 対話シェル `docker exec -it` を起動（`/bin/bash` -> `/bin/sh`）

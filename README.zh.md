@@ -91,6 +91,10 @@ which dps 2>/dev/null || echo "已卸载 dps"
 
 - `dps [关键词]` — 查看运行中容器列表（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
 - `dps -a [关键词]` — 查看所有容器（包括已停止的容器，格式与 `dps` 相同）
+- `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
+- `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
+- `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
+- `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）
 - `dps -s [-a]` — 查看 `CPU`、`MEM`、`RESTART`、`DISK`（添加 `-a` 可同时查看已停止容器）
 - `dps -w [容器名]` — 直接运行 `docker stats`
 - `dps -e <容器> [shell]` — 打开交互式终端 `docker exec -it`（`/bin/bash` -> `/bin/sh`）

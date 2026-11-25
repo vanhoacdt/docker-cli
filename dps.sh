@@ -21,6 +21,35 @@ while [[ $# -gt 0 ]]; do
     -d|--deploy|--mounts) DEPLOY_MODE=1 ;;
     -i|--images) IMAGE_MODE=1 ;;
     -o|--overview) OVERVIEW_MODE=1 ;;
+    -u|--up)
+      shift
+      exec docker compose up -d "$@"
+      ;;
+    -r|--restart)
+      shift
+      TARGET_R="${1:-}"
+      [[ -z "$TARGET_R" ]] && { echo "Dùng: dps -r <tên_hoặc_#>" >&2; exit 1; }
+      TARGET="$TARGET_R" python3 - <<'PY'
+import os, subprocess
+target = os.environ.get("TARGET", "").strip()
+raw = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}"], text=True)
+names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
+if not names: raise SystemExit("Không có container nào.")
+if target.isdigit():
+    idx = int(target)
+    if idx < 1 or idx > len(names): raise SystemExit(f"Số thứ tự #{idx} nằm ngoài phạm vi 1..{len(names)}.")
+    cname = names[idx - 1]
+else:
+    exact = [n for n in names if n.lower() == target.lower()]
+    matches = exact or [n for n in names if target.lower() in n.lower()]
+    if not matches: raise SystemExit(f"Không tìm thấy container khớp: {target}")
+    cname = matches[0]
+print(f"Đang khởi động lại: {cname} ...")
+subprocess.run(["docker", "restart", cname], check=True)
+print(f"Đã restart xong: {cname}")
+PY
+      exit $?
+      ;;
     -e|--exec)
       shift
       c="${1:-}"
@@ -86,6 +115,8 @@ dps - Trình xem nhanh trạng thái Docker container, image & hệ thống (Deb
 Cách dùng:
   dps [từ_khóa]                   Xem container đang chạy (CONTAINER, STATUS, RESTART, DISK, PORTS, NETWORKS)
   dps -a [từ_khóa]                Xem toàn bộ container kể cả đã dừng (format như dps)
+  dps -u [service...]             Chạy docker compose up -d ở thư mục hiện tại
+  dps -r <tên_hoặc_#>             Khởi động lại (docker restart) container theo tên hoặc số thứ tự #
   dps -s [-a]                     Xem CPU, MEM, RESTART, DISK của container (thêm -a để xem cả container dừng)
   dps -w [tên_container]          Chạy trực tiếp giao diện docker stats
   dps -e <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
