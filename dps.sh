@@ -752,11 +752,20 @@ def short_path(p: str) -> str:
     if home and p.startswith(home): return "~" + p[len(home):]
     return p
 
-net_info_map, compose_map, restart_map, mounts_map = {}, {}, {}, {}
+net_info_map, compose_map, restart_map, mounts_map, health_map = {}, {}, {}, {}, {}
 if ids:
     insp = subprocess.check_output(["docker", "inspect", *ids], text=True, stderr=subprocess.DEVNULL)
     for obj in json.loads(insp):
         cid = (obj.get("Id") or "")[:12]
+        st_obj = obj.get("State") or {}
+        cfg_obj = obj.get("Config") or {}
+        h_obj = st_obj.get("Health") or {}
+        if h_obj.get("Status"):
+            health_map[cid] = h_obj["Status"].strip().lower()
+        elif cfg_obj.get("Healthcheck"):
+            health_map[cid] = "configured"
+        else:
+            health_map[cid] = "-"
         nets = (obj.get("NetworkSettings") or {}).get("Networks") or {}
         ordered = sorted(nets.items(), key=lambda kv: (0 if kv[0] == "wifi-net" else (1 if kv[0] == "ci-local_default" else 2), kv[0].lower()))
         entries = [(n_name, ((n_cfg or {}).get("IPAddress") or "").strip() or "-") for n_name, n_cfg in ordered]
@@ -892,8 +901,19 @@ elif show_stats or watch_mode:
     headers = ["#", "CONTAINER", "STATUS", "RESTART", "CPU", "MEM", "DISK"]
     table = [[str(i), r[1], r[3], r[4], r[5], r[6], r[7]] for i, r in enumerate(rows, 1)]
 else:
-    headers = ["#", "CONTAINER", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
-    table = [[str(i), r[1], r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
+    def fmt_state_lbl(st_raw, status_raw):
+        st_l, s_l = st_raw.lower(), status_raw.lower()
+        if "unhealthy" in s_l or re.search(r"exited \([1-9][0-9]*\)", s_l):
+            return "error"
+        if st_l == "exited":
+            return "stopped"
+        return st_l or "-"
+    if not only_running:
+        headers = ["#", "CONTAINER", "STATE", "HEALTH", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
+        table = [[str(i), r[1], fmt_state_lbl(r[2], r[3]), health_map.get(r[0], "-"), r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
+    else:
+        headers = ["#", "CONTAINER", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
+        table = [[str(i), r[1], r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
 
 if not table:
     print("Không có container nào khớp.")
