@@ -89,7 +89,7 @@ which dps 2>/dev/null || echo "已卸载 dps"
 
 ## 使用方法
 
-- `dps [关键词]` — 查看运行中容器列表（`CONTAINER`、`STATUS`、`RESTART`、`DISK`、`PORTS`、`NETWORKS`）
+- `dps [关键词]` — 查看运行中容器列表（`CONTAINER`、`STATUS`、`PORTS`、`NETWORKS`）
 - `dps -a [关键词]` — 查看所有容器（包括已停止的容器，格式与 `dps` 相同）
 - `dps -u [service...]` — 在当前目录执行 `docker compose up -d`
 - `dps -r <名称或#>` — 按名称或序号 `#` 重启容器（`docker restart`）

@@ -90,7 +90,7 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 
 ## Usage
 
-- `dps [keyword]` — List running containers (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
+- `dps [keyword]` — List running containers (`CONTAINER`, `STATUS`, `PORTS`, `NETWORKS`)
 - `dps -a [keyword]` — List all containers including stopped ones (same format as `dps`)
 - `dps -u [service...]` — Run `docker compose up -d` in the current directory
 - `dps -r <name_or_#>` — Restart (`docker restart`) a container by name or index `#`

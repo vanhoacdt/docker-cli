@@ -91,7 +91,7 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 
 ## Cách dùng
 
-- `dps [từ_khóa]` — Danh sách container đang chạy (`CONTAINER`, `STATUS`, `RESTART`, `DISK`, `PORTS`, `NETWORKS`)
+- `dps [từ_khóa]` — Danh sách container đang chạy (`CONTAINER`, `STATUS`, `PORTS`, `NETWORKS`)
 - `dps -a [từ_khóa]` — Danh sách toàn bộ container kể cả đã dừng (format như `dps`)
 - `dps -u [service...]` — Chạy `docker compose up -d` ở thư mục hiện tại
 - `dps -r <tên_hoặc_#>` — Khởi động lại (`docker restart`) container theo tên hoặc số thứ tự `#`

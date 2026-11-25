@@ -201,7 +201,7 @@ if [[ "$HELP_MODE" == "1" ]]; then
 dps - Trình xem nhanh trạng thái Docker container, image & hệ thống (Debian 12)
 
 Cách dùng:
-  dps [từ_khóa]                   Xem container đang chạy (CONTAINER, STATUS, RESTART, DISK, PORTS, NETWORKS)
+  dps [từ_khóa]                   Xem container đang chạy (CONTAINER, STATUS, PORTS, NETWORKS)
   dps -a [từ_khóa]                Xem toàn bộ container kể cả đã dừng (format như dps)
   dps -u [service...]             Chạy docker compose up -d ở thư mục hiện tại
   dps -r <tên_hoặc_#>             Khởi động lại (docker restart) container theo tên hoặc số thứ tự #
@@ -912,8 +912,8 @@ else:
         headers = ["#", "CONTAINER", "STATE", "HEALTH", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
         table = [[str(i), r[1], fmt_state_lbl(r[2], r[3]), health_map.get(r[0], "-"), r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
     else:
-        headers = ["#", "CONTAINER", "STATUS", "RESTART", "DISK", "PORTS", "NETWORKS"]
-        table = [[str(i), r[1], r[3], r[4], r[7], r[8], r[9]] for i, r in enumerate(rows, 1)]
+        headers = ["#", "CONTAINER", "STATUS", "PORTS", "NETWORKS"]
+        table = [[str(i), r[1], r[3], r[8], r[9]] for i, r in enumerate(rows, 1)]
 
 if not table:
     print("Không có container nào khớp.")
