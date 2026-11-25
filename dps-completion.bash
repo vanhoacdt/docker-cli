@@ -49,10 +49,10 @@ _dps_completion() {
         return 0
     fi
 
-    # Gợi ý tiếp các container đang chạy / restarting khi dùng hàng loạt (-k, -r) hoặc tất cả container (-m)
+    # Gợi ý tiếp các mục tiêu từ đối số thứ 2 trở đi ($cword >= 3)
     if [[ $cword -ge 3 ]]; then
         case "${words[1]}" in
-            -r|--restart|-k|--stop)
+            -r|--restart|-k|--stop|-t|--top|-f|--follow|-w|--watch|-p)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
                 local running
@@ -61,7 +61,7 @@ _dps_completion() {
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
-            -m|--rm)
+            -m|--rm|-c|--inspect|-l|--logs|-a|-s|-d)
                 local svcs=""
                 [[ $cword -eq 3 ]] && svcs=$(_dps_find_compose_svcs "${words[2]}")
                 local all_c
@@ -70,7 +70,7 @@ _dps_completion() {
                 [[ "$cur" == */* || "$cur" == ~* || "$cur" == .* ]] && _filedir
                 return 0
                 ;;
-            -u|--up|-l|--logs|-f|--follow|-c|--inspect|-t|--top|-x|--exec|-w|--watch)
+            -u|--up|-x|--exec)
                 local svcs
                 svcs=$(_dps_find_compose_svcs "${words[2]}")
                 if [[ -n "$svcs" ]]; then

@@ -154,6 +154,102 @@ PY_RES
   return $rc
 }
 
+
+resolve_target_list() {
+  local only_run="$1"
+  shift
+  python3 - "$only_run" "$@" <<'PY_LIST'
+import json, os, subprocess, sys
+
+only_run = sys.argv[1] == "1"
+args = sys.argv[2:]
+
+cmd = ["docker", "ps", "--filter", "status=running", "--filter", "status=restarting", "--format", "{{.Names}}"] if only_run else ["docker", "ps", "-a", "--format", "{{.Names}}"]
+all_names = sorted([x.strip() for x in subprocess.check_output(cmd, text=True).splitlines() if x.strip()], key=str.lower)
+
+raw_ids = subprocess.check_output(["docker", "ps", "-aq"], text=True).split()
+insp_map = {}
+if raw_ids:
+    for obj in json.loads(subprocess.check_output(["docker", "inspect", *raw_ids], text=True)):
+        cname = (obj.get("Name") or "").lstrip("/")
+        st = (obj.get("State") or {}).get("Status", "").lower()
+        labels = ((obj.get("Config") or {}).get("Labels") or {})
+        insp_map[cname] = {
+            "status": st,
+            "wdir": labels.get("com.docker.compose.project.working_dir") or "",
+            "cfiles": labels.get("com.docker.compose.project.config_files") or "",
+            "svc": (labels.get("com.docker.compose.service") or "").lower(),
+        }
+
+def find_compose(raw):
+    exp = os.path.expanduser(raw)
+    if os.path.isfile(exp):
+        return os.path.realpath(exp)
+    if os.path.isdir(exp):
+        for cf in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+            p = os.path.join(exp, cf)
+            if os.path.isfile(p):
+                return os.path.realpath(p)
+    elif "/" not in raw and not raw.startswith(("~", ".")) and raw not in all_names:
+        home_proj = os.path.expanduser(f"~/docker/{raw}")
+        if os.path.isdir(home_proj):
+            for cf in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+                p = os.path.join(home_proj, cf)
+                if os.path.isfile(p):
+                    return os.path.realpath(p)
+    return ""
+
+def project_containers(cfile, svc_filter=""):
+    pdir = os.path.dirname(cfile)
+    res = []
+    for cname, info in sorted(insp_map.items(), key=lambda x: x[0].lower()):
+        if only_run and info["status"] not in ("running", "restarting"):
+            continue
+        cfiles = [os.path.realpath(x.strip()) for x in info["cfiles"].split(",") if x.strip()]
+        wdir = os.path.realpath(info["wdir"]) if info["wdir"] else ""
+        if cfile in cfiles or wdir == pdir:
+            if svc_filter and svc_filter.lower() not in (info["svc"], cname.lower()):
+                continue
+            res.append(cname)
+    return res
+
+out = []
+# Hỗ trợ trường hợp truyền 1 dự án + 1 service (vd: dps -t ~/docker/homeassistant/ mosquitto)
+if len(args) == 2:
+    cf = find_compose(args[0])
+    if cf and not args[1].isdigit() and not find_compose(args[1]):
+        p_ctrs = project_containers(cf, args[1])
+        if p_ctrs:
+            for c in p_ctrs:
+                if c not in out:
+                    out.append(c)
+            print("\n".join(out))
+            sys.exit(0)
+
+for item in args:
+    cf = find_compose(item)
+    if cf:
+        for c in project_containers(cf):
+            if c not in out:
+                out.append(c)
+    elif item.isdigit():
+        idx = int(item)
+        if 1 <= idx <= len(all_names):
+            c = all_names[idx - 1]
+            if c not in out:
+                out.append(c)
+    else:
+        exact = [n for n in all_names if n.lower() == item.lower()]
+        matches = exact or [n for n in all_names if item.lower() in n.lower()]
+        for c in matches:
+            if c not in out:
+                out.append(c)
+
+for c in out:
+    print(c)
+PY_LIST
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) HELP_MODE=1 ;;
@@ -236,6 +332,18 @@ while [[ $# -gt 0 ]]; do
       exit $?
       ;;
     -t|--top)
+      shift
+      [[ $# -eq 0 ]] && { echo "Dùng: dps -t <mục_tiêu_1> [mục_tiêu_2...]" >&2; exit 1; }
+      mapfile -t MULTI_CTRS < <(resolve_target_list "1" "$@")
+      if [[ ${#MULTI_CTRS[@]} -gt 1 ]]; then
+        for _mc in "${MULTI_CTRS[@]}"; do
+          echo -e "\n\033[1;36m=== $_mc ===\033[0m"
+          "$0" -t "$_mc"
+        done
+        exit 0
+      elif [[ ${#MULTI_CTRS[@]} -eq 1 ]]; then
+        set -- "${MULTI_CTRS[0]}"
+      fi
       shift
       TARGET_ARG="${1:-}"
       [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -t <tên_hoặc_#_hoặc_đường_dẫn> [service]" >&2; exit 1; }
@@ -370,13 +478,12 @@ PY
       ;;
     -w|--watch)
       shift
-      if [[ -n "${1:-}" ]] && CFILE="$(resolve_compose_context "$1")"; then
-        mapfile -t PROJ_CTRS < <(get_project_containers "$CFILE" "1" "${2:-}")
-        [[ ${#PROJ_CTRS[@]} -eq 0 ]] && { echo "Không có container đang chạy trong dự án: $CFILE" >&2; exit 1; }
-        exec docker stats "${PROJ_CTRS[@]}"
+      if [[ $# -eq 0 ]]; then
+        exec docker stats
       fi
-      shift
-      exec docker stats "$@"
+      mapfile -t W_CTRS < <(resolve_target_list "1" "$@")
+      [[ ${#W_CTRS[@]} -eq 0 ]] && { echo "Không tìm thấy container đang chạy phù hợp." >&2; exit 1; }
+      exec docker stats "${W_CTRS[@]}" 
       ;;
     -c|--config|--inspect)
       INSPECT_MODE=1
@@ -386,6 +493,41 @@ PY
       fi
       ;;
     -l|--logs)
+      shift
+      [[ $# -eq 0 ]] && { echo "Dùng: dps -l <mục_tiêu_1> [mục_tiêu_2...] [N]" >&2; exit 1; }
+      _N_LINES="20"
+      _ARGS=("$@")
+      if [[ ${#_ARGS[@]} -ge 2 && "${_ARGS[-1]}" =~ ^[0-9]+$ ]]; then
+        _N_LINES="${_ARGS[-1]}"
+        unset '_ARGS[-1]'
+      fi
+      mapfile -t LOG_CTRS < <(resolve_target_list "0" "${_ARGS[@]}")
+      if [[ ${#LOG_CTRS[@]} -gt 1 ]]; then
+        if [[ "0" == "0" ]]; then
+          for _lc in "${LOG_CTRS[@]}"; do
+            echo -e "\n\033[1;36m=== LOG: $_lc (tail $_N_LINES) ===\033[0m"
+            "$0" -l "$_lc" "$_N_LINES"
+          done
+          exit 0
+        else
+          trap 'kill 0 2>/dev/null' EXIT INT TERM
+          _COLORS=("36" "32" "33" "35" "34" "31")
+          _idx=0
+          for _lc in "${LOG_CTRS[@]}"; do
+            _col="${_COLORS[$((_idx % ${#_COLORS[@]}))]}"
+            docker logs -f --tail "$_N_LINES" "$_lc" 2>&1 | sed -u "s/^/\x1b[1;${_col}m[$_lc]\x1b[0m /" &
+            _idx=$((_idx + 1))
+          done
+          wait
+          exit 0
+        fi
+      elif [[ ${#LOG_CTRS[@]} -eq 1 ]]; then
+        if [[ ${#_ARGS[@]} -lt $# ]]; then
+          set -- "${LOG_CTRS[0]}" "$_N_LINES"
+        else
+          set -- "${LOG_CTRS[0]}"
+        fi
+      fi
       shift
       TARGET_ARG="${1:-}"
       [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -l <tên_hoặc_#_hoặc_đường_dẫn> [service] [N]" >&2; exit 1; }
@@ -423,6 +565,41 @@ PY
       fi
       ;;
     -f|--follow)
+      shift
+      [[ $# -eq 0 ]] && { echo "Dùng: dps -f <mục_tiêu_1> [mục_tiêu_2...] [N]" >&2; exit 1; }
+      _N_LINES="20"
+      _ARGS=("$@")
+      if [[ ${#_ARGS[@]} -ge 2 && "${_ARGS[-1]}" =~ ^[0-9]+$ ]]; then
+        _N_LINES="${_ARGS[-1]}"
+        unset '_ARGS[-1]'
+      fi
+      mapfile -t LOG_CTRS < <(resolve_target_list "0" "${_ARGS[@]}")
+      if [[ ${#LOG_CTRS[@]} -gt 1 ]]; then
+        if [[ "1" == "0" ]]; then
+          for _lc in "${LOG_CTRS[@]}"; do
+            echo -e "\n\033[1;36m=== LOG: $_lc (tail $_N_LINES) ===\033[0m"
+            "$0" -l "$_lc" "$_N_LINES"
+          done
+          exit 0
+        else
+          trap 'kill 0 2>/dev/null' EXIT INT TERM
+          _COLORS=("36" "32" "33" "35" "34" "31")
+          _idx=0
+          for _lc in "${LOG_CTRS[@]}"; do
+            _col="${_COLORS[$((_idx % ${#_COLORS[@]}))]}"
+            docker logs -f --tail "$_N_LINES" "$_lc" 2>&1 | sed -u "s/^/\x1b[1;${_col}m[$_lc]\x1b[0m /" &
+            _idx=$((_idx + 1))
+          done
+          wait
+          exit 0
+        fi
+      elif [[ ${#LOG_CTRS[@]} -eq 1 ]]; then
+        if [[ ${#_ARGS[@]} -lt $# ]]; then
+          set -- "${LOG_CTRS[0]}" "$_N_LINES"
+        else
+          set -- "${LOG_CTRS[0]}"
+        fi
+      fi
       shift
       TARGET_ARG="${1:-}"
       [[ -z "$TARGET_ARG" ]] && { echo "Dùng: dps -f <tên_hoặc_#_hoặc_đường_dẫn> [service] [N]" >&2; exit 1; }
