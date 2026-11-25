@@ -853,7 +853,7 @@ for line in raw.splitlines():
     st_low = state.lower()
     all_states.append(st_low)
     if full_ports and st_low != "running": continue
-    if only_running and st_low != "running": continue
+    if only_running and st_low not in ("running", "restarting"): continue
     entries = net_info_map.get(cid_short, [])
     if not entries and nets.strip():
         ns = [x.strip() for x in nets.split(",") if x.strip()]
