@@ -24,7 +24,7 @@ _dps_completions() {
   first="${COMP_WORDS[1]:-}"
   idx="${COMP_CWORD}"
 
-  local short_opts="-a -u -r -k -m -n -t -s -w -e -d -p -i -c -o -l -f -h"
+  local short_opts="-a -u -r -k -m -n -t -e -x -s -w -d -p -i -c -o -l -f -h"
 
   if [[ "$idx" -eq 1 ]]; then
     if [[ -z "$cur" || "$cur" == -* ]]; then
@@ -57,6 +57,14 @@ _dps_completions() {
       fi
       return 0
       ;;
+    -e|--events)
+      if [[ "$idx" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "$(_dps_container_names) start stop die restart health_status oom pull create destroy" -- "$cur") )
+      else
+        COMPREPLY=()
+      fi
+      return 0
+      ;;
     -n|--net|--networks)
       if [[ "$idx" -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "$(_dps_network_names)" -- "$cur") )
@@ -69,7 +77,7 @@ _dps_completions() {
       COMPREPLY=( $(compgen -W "$(_dps_compose_services)" -- "$cur") )
       return 0
       ;;
-    -e|--exec)
+    -x|--exec)
       if [[ "$idx" -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "$(_dps_running_names)" -- "$cur") )
       elif [[ "$idx" -eq 3 ]]; then

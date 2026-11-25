@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; NET_MODE=0; HELP_MODE=0
+SHOW_STATS=0; FULL_PORTS=0; DEPLOY_MODE=0; IMAGE_MODE=0; OVERVIEW_MODE=0; WATCH_MODE=0; INSPECT_MODE=0; LOG_MODE=0; FOLLOW_MODE=0; NET_MODE=0; EVENTS_MODE=0; HELP_MODE=0
 SORT_MODE=""; ONLY_RUNNING=1; TARGET=""; TAIL="20"
 
 get_virtual_sizes() {
@@ -21,6 +21,13 @@ while [[ $# -gt 0 ]]; do
     -d|--deploy|--mounts) DEPLOY_MODE=1 ;;
     -i|--images) IMAGE_MODE=1 ;;
     -o|--overview) OVERVIEW_MODE=1 ;;
+    -e|--events)
+      EVENTS_MODE=1
+      if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+        shift
+        TARGET="$1"
+      fi
+      ;;
     -n|--net|--networks)
       NET_MODE=1
       if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -131,10 +138,10 @@ subprocess.run(["docker", "top", cname], check=True)
 PY
       exit $?
       ;;
-    -e|--exec)
+    -x|--exec)
       shift
       c="${1:-}"
-      [[ -z "$c" ]] && { echo "Dùng: dps -e <tên_hoặc_id_container> [shell]" >&2; exit 1; }
+      [[ -z "$c" ]] && { echo "Dùng: dps -x <tên_hoặc_id_container> [shell]" >&2; exit 1; }
       sh_bin="${2:-/bin/bash}"
       if [[ -z "${2:-}" ]] && ! docker exec "$c" test -x /bin/bash 2>/dev/null; then
         sh_bin="/bin/sh"
@@ -202,9 +209,10 @@ Cách dùng:
   dps -m <tên_hoặc_#>             Dừng và xóa (docker rm -f) container theo tên hoặc số thứ tự #
   dps -n [tên_mạng]               Xem danh sách Docker networks, subnet, gateway & container đang kết nối
   dps -t <tên_hoặc_#>             Xem các tiến trình đang chạy trong container (docker top)
+  dps -e [từ_khóa]                Theo dõi sự kiện Docker real-time (docker events)
   dps -s [-a]                     Xem CPU, MEM, RESTART, DISK của container (thêm -a để xem cả container dừng)
   dps -w [tên_container]          Chạy trực tiếp giao diện docker stats
-  dps -e <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
+  dps -x <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
   dps -d [-a] [từ_khóa]           Xem DISK, COMPOSE FILE và MOUNTS (phân chia đường kẻ từng container) (kèm VIRTUAL)
   dps -p [từ_khóa]                Xem container đang chạy + tách HOST/EXPOSE PORTS, NETWORKS, IP, PEER
   dps -i [từ_khóa]                Xem danh sách Docker image kèm cột STATE và USED BY
@@ -214,6 +222,82 @@ Cách dùng:
   dps -f <tên_hoặc_#> [N]         Xem N dòng log trực tiếp (mặc định 20) theo tên hoặc số thứ tự #
   dps -h | --help                 Hiển thị trợ giúp này
 HELP_EOF
+  exit 0
+fi
+
+if [[ "$EVENTS_MODE" == "1" ]]; then
+  FILTER="$TARGET" python3 - <<'PY'
+import datetime, json, os, subprocess
+
+flt = os.environ.get("FILTER", "").strip().lower()
+header = f"=== DOCKER EVENTS (Ctrl+C để thoát){f' | filter: {flt}' if flt else ''} ==="
+print(header)
+
+proc = subprocess.Popen(
+    ["docker", "events", "--format", "{{json .}}"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    bufsize=1,
+)
+
+try:
+    assert proc.stdout is not None
+    for raw in proc.stdout:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:
+            if not flt or flt in line.lower():
+                print(line, flush=True)
+            continue
+
+        ts_nano = ev.get("timeNano") or 0
+        ts_sec = ev.get("time") or 0
+        if ts_nano:
+            dt = datetime.datetime.fromtimestamp(ts_nano / 1e9)
+        elif ts_sec:
+            dt = datetime.datetime.fromtimestamp(ts_sec)
+        else:
+            dt = datetime.datetime.now()
+        ts_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        etype = (ev.get("Type") or "-").strip()
+        action = (ev.get("Action") or "-").strip()
+        actor = ev.get("Actor") or {}
+        attrs = actor.get("Attributes") or {}
+        name = (attrs.get("name") or actor.get("ID") or "-")[:24]
+
+        act_low = action.lower()
+        if any(k in act_low for k in ("die", "kill", "oom", "error", "destroy", "unhealthy")):
+            badge, color = "[ERR]", "\033[31m"
+        elif any(k in act_low for k in ("stop", "pause", "disconnect", "detach")):
+            badge, color = "[WRN]", "\033[33m"
+        elif any(k in act_low for k in ("start", "create", "healthy", "connect", "pull")):
+            badge, color = "[INF]", "\033[36m"
+        else:
+            badge, color = "[EVT]", ""
+
+        extra = ""
+        if "exitCode" in attrs and act_low == "die":
+            extra = f" (exitCode={attrs['exitCode']})"
+
+        out = f"{ts_str} {badge} [{etype}] {name} -> {action}{extra}"
+        if not flt or flt in out.lower():
+            if color:
+                print(f"{color}{out}\033[0m", flush=True)
+            else:
+                print(out, flush=True)
+except KeyboardInterrupt:
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    print()
+PY
   exit 0
 fi
 

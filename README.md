@@ -107,7 +107,8 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 - `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
 - `dps -s [-a]` — Xem `CPU`, `MEM`, `RESTART`, `DISK` (thêm `-a` để xem cả container đã dừng)
 - `dps -w [tên_container]` — Chạy trực tiếp `docker stats`
-- `dps -e <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
+- `dps -x <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
+- `dps -e [từ_khóa]` — Theo dõi sự kiện Docker real-time (`docker events`)
 - `dps -d [-a] [từ_khóa]` — Xem `DISK`, `VIRTUAL`, `COMPOSE FILE` và `MOUNTS`
 - `dps -p [từ_khóa]` — Xem container đang chạy + tách `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
 - `dps -i [từ_khóa]` — Danh sách Docker images kèm cột `STATE` và `USED BY`

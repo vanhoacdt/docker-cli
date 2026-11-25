@@ -106,7 +106,8 @@ which dps 2>/dev/null || echo "Uninstalled dps"
 - `dps -t <name_or_#>` — Display running processes inside a container (`docker top`)
 - `dps -s [-a]` — View `CPU`, `MEM`, `RESTART`, `DISK` (add `-a` to include stopped containers)
 - `dps -w [container_name]` — Run `docker stats` directly
-- `dps -e <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)
+- `dps -x <container> [shell]` — Open interactive `docker exec -it` shell (`/bin/bash` -> `/bin/sh`)
+- `dps -e [keyword]` — Stream real-time Docker daemon events (`docker events`)
 - `dps -d [-a] [keyword]` — View `DISK`, `VIRTUAL`, `COMPOSE FILE`, and `MOUNTS`
 - `dps -p [keyword]` — View running containers with split `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
 - `dps -i [keyword]` — List Docker images with `STATE` and `USED BY` columns

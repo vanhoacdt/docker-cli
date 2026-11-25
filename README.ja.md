@@ -106,7 +106,8 @@ which dps 2>/dev/null || echo "dps をアンインストールしました"
 - `dps -t <名前または#>` — コンテナ内の実行中プロセスを表示（`docker top`）
 - `dps -s [-a]` — `CPU`、`MEM`、`RESTART`、`DISK` を表示（`-a` 追加で停止中コンテナも表示）
 - `dps -w [コンテナ名]` — `docker stats` を直接実行
-- `dps -e <container> [shell]` — 対話シェル `docker exec -it` を起動（`/bin/bash` -> `/bin/sh`）
+- `dps -x <container> [shell]` — 対話シェル `docker exec -it` を起動（`/bin/bash` -> `/bin/sh`）
+- `dps -e [キーワード]` — Docker イベントをリアルタイム監視（`docker events`）
 - `dps -d [-a] [キーワード]` — `DISK`、`VIRTUAL`、`COMPOSE FILE`、`MOUNTS` を表示
 - `dps -p [キーワード]` — 稼働中コンテナ + `HOST/EXPOSE PORTS`、`NETWORKS`、`IP`、`PEER` を分離表示
 - `dps -i [キーワード]` — `STATE` と `USED BY` 列付きの Docker イメージ一覧
