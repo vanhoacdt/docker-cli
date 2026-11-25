@@ -91,26 +91,59 @@ which dps 2>/dev/null || echo "Đã gỡ dps"
 
 ## Cách dùng
 
-- `dps [từ_khóa]` — Danh sách container đang chạy (`CONTAINER`, `STATUS`, `PORTS`, `NETWORKS`)
-- `dps -a [từ_khóa]` — Danh sách toàn bộ container kể cả đã dừng (format như `dps`)
-- `dps -u [service...]` — Chạy `docker compose up -d` ở thư mục hiện tại
-- `dps -r <tên_hoặc_#>` — Khởi động lại (`docker restart`) container theo tên hoặc số thứ tự `#`
-- `dps -k <tên_hoặc_#>` — Dừng (`docker stop`) container theo tên hoặc số thứ tự `#`
-- `dps -m <tên_hoặc_#>` — Dừng và xóa (`docker rm -f`) container theo tên hoặc số thứ tự `#`
-- `dps -n [tên_mạng]` — Xem danh sách Docker networks, subnet, gateway & container đang kết nối
-- `dps -t <tên_hoặc_#>` — Xem các tiến trình đang chạy trong container (`docker top`)
-- `dps -s [-a]` — Xem `CPU`, `MEM`, `RESTART`, `DISK` (thêm `-a` để xem cả container đã dừng)
-- `dps -w [tên_container]` — Chạy trực tiếp `docker stats`
-- `dps -x <container> [shell]` — Mở shell tương tác `docker exec -it` (`/bin/bash` -> `/bin/sh`)
-- `dps -e [từ_khóa]` — Theo dõi sự kiện Docker real-time (`docker events`)
-- `dps -d [-a] [từ_khóa]` — Xem `DISK`, `VIRTUAL`, `COMPOSE FILE` và `MOUNTS`
-- `dps -p [từ_khóa]` — Xem container đang chạy + tách `HOST/EXPOSE PORTS`, `NETWORKS`, `IP`, `PEER`
-- `dps -i [từ_khóa]` — Danh sách Docker images kèm cột `STATE` và `USED BY`
-- `dps -c <tên_hoặc_#>` — Cấu hình, network, mount và compose của 1 container
-- `dps -o` — Tổng quan dung lượng `Images`, `Containers`, `Local Volumes`, `Build Cache` & orphan volumes
-- `dps -l <tên_hoặc_#> [N]` — Xem `N` dòng log cuối (mặc định 20)
-- `dps -f <tên_hoặc_#> [N]` — Theo dõi `N` dòng log trực tiếp (mặc định 20)
-- `dps -h` — Trợ giúp
+### Quy ước tham số phía sau lệnh
+* **`[...]` (Ngoặc vuông)**: Tham số **tùy chọn** — có thể bỏ qua.
+* **`<...>` (Ngoặc nhọn)**: Tham số **bắt buộc** — phải nhập ít nhất 1 giá trị.
+* **`<mục_tiêu>`**: Có thể truyền linh hoạt **1 trong 4 dạng** từ bất kỳ thư mục nào:
+  1. **Tên container** (hoặc từ khóa lọc): `mosquitto`, `wifi`
+  2. **Số thứ tự `#`** trên bảng `dps`: `1`, `3`
+  3. **Tên dự án trong `~/docker/`**: `homeassistant`, `dozzle`
+  4. **Đường dẫn thư mục hoặc file `docker-compose.yml`**: `~/docker/homeassistant/`, `./docker-compose.yml`
+* **`[service]`**: Tên service khai báo bên trong file `docker-compose.yml` (dùng khi `<mục_tiêu>` là một dự án nhiều container, ví dụ `mosquitto` trong `~/docker/homeassistant/`). Nếu bỏ trống khi dùng `-r`, `-k`, `-m`, lệnh sẽ áp dụng cho **toàn bộ container** của dự án đó.
+* **`[N]`**: Số dòng log muốn hiển thị (nếu không nhập sẽ mặc định lấy **`20`** dòng cuối).
+* **`[shell]`**: Đường dẫn shell muốn mở bên trong container (ví dụ `/bin/sh`; mặc định tự thử `/bin/bash` trước rồi mới lùi về `/bin/sh`).
+
+---
+
+### 1. Xem trạng thái & thông tin cấu hình
+| Lệnh | Tham số & Ý nghĩa chi tiết | Ví dụ thực tế |
+| :--- | :--- | :--- |
+| `dps [mục_tiêu]` | Liệt kê container đang chạy (và `restarting` màu đỏ). Bỏ trống để xem tất cả; nhập từ khóa hoặc đường dẫn dự án để lọc. | `dps`<br>`dps wifi`<br>`dps ~/docker/homeassistant/` |
+| `dps -a [mục_tiêu]` | Liệt kê **toàn bộ** container kể cả đã dừng/thoát lỗi, bổ sung cột `STATE`, `HEALTH`, `RESTART`, `DISK`. | `dps -a`<br>`dps -a ~/docker/ci-local/` |
+| `dps -c <mục_tiêu> [service]` | Xem chi tiết cấu hình 1 container (image gốc, lệnh khởi chạy, file compose, mạng, cổng, mounts). | `dps -c 1`<br>`dps -c ~/docker/homeassistant/ mosquitto` |
+| `dps -h` \| `--help` | Hiển thị bảng hướng dẫn sử dụng nhanh ngay trên terminal. | `dps -h` |
+
+### 2. Điều khiển vòng đời & truy cập Container
+| Lệnh | Tham số & Ý nghĩa chi tiết | Ví dụ thực tế |
+| :--- | :--- | :--- |
+| `dps -u [mục_tiêu] [service...] [cờ]` | Chạy `docker compose up -d` tại thư mục hiện tại, hoặc bật dự án/service từ bất kỳ thư mục nào. | `dps -u`<br>`dps -u dozzle`<br>`dps -u ~/docker/homeassistant/ mosquitto --force-recreate` |
+| `dps -r <mục_tiêu> [service]` | Khởi động lại (`docker restart`) 1 container, 1 service cụ thể hoặc toàn bộ dự án. | `dps -r mosquitto`<br>`dps -r 2`<br>`dps -r ~/docker/homeassistant/` |
+| `dps -k <mục_tiêu> [service]` | Dừng (`docker stop`) container đang chạy theo tên, số `#`, service hoặc cả dự án. | `dps -k dozzle`<br>`dps -k ~/docker/homeassistant/ esphome` |
+| `dps -m <mục_tiêu> [service]` | Dừng và xóa hẳn container (`docker rm -f`). | `dps -m 5`<br>`dps -m ~/docker/vnc/` |
+| `dps -x <mục_tiêu> [service] [shell]` | Mở giao diện dòng lệnh tương tác bên trong container (`docker exec -it`). | `dps -x 1`<br>`dps -x ~/docker/homeassistant/ mosquitto /bin/sh` |
+
+### 3. Giám sát tài nguyên, tiến trình & sự kiện
+| Lệnh | Tham số & Ý nghĩa chi tiết | Ví dụ thực tế |
+| :--- | :--- | :--- |
+| `dps -s [-a] [mục_tiêu]` | Xem mức tiêu thụ `CPU`, `MEM`, `RESTART`, `DISK`. Thêm `-a` để hiển thị cả container đã dừng. | `dps -s`<br>`dps -s -a ~/docker/homeassistant/` |
+| `dps -w [mục_tiêu] [service]` | Mở màn hình giám sát trực tiếp theo thời gian thực (`docker stats`). Bấm `Ctrl + C` để thoát. | `dps -w`<br>`dps -w ~/docker/homeassistant/` |
+| `dps -t <mục_tiêu> [service]` | Xem bảng các tiến trình (`PID`, `PPID`, `USER`, `TIME`, `COMMAND`) đang chạy bên trong container (`docker top`). | `dps -t 1`<br>`dps -t ~/docker/homeassistant/ homeassistant` |
+| `dps -e [từ_khóa]` | Theo dõi luồng sự kiện Docker thời gian thực (`docker events`). Có thể lọc theo tên container/sự kiện. | `dps -e`<br>`dps -e homeassistant` |
+
+### 4. Kiểm tra Mạng, Lưu trữ & Image
+| Lệnh | Tham số & Ý nghĩa chi tiết | Ví dụ thực tế |
+| :--- | :--- | :--- |
+| `dps -n [tên_mạng]` | Liệt kê các Docker network kèm `DRIVER`, `SUBNET`, `GATEWAY` và danh sách container đang kết nối. | `dps -n`<br>`dps -n wifi-net` |
+| `dps -p [mục_tiêu]` | Xem chi tiết mạng của container đang chạy, tách rõ `HOST/EXPOSE PORTS`, `NETWORKS`, `IP` và `PEER`. | `dps -p`<br>`dps -p ~/docker/homeassistant/` |
+| `dps -d [-a] [mục_tiêu]` | Kiểm tra dung lượng `DISK`, `VIRTUAL`, đường dẫn `COMPOSE FILE` và chi tiết `MOUNTS`. | `dps -d`<br>`dps -d -a ~/docker/nextcloud-docker/` |
+| `dps -i [từ_khóa]` | Liệt kê toàn bộ Docker image kèm trạng thái (`STATE`) và tên container đang dùng (`USED BY`). | `dps -i`<br>`dps -i postgres` |
+| `dps -o` | Thống kê tổng quan dung lượng Docker (Images, Containers, Volumes, Build Cache) và volume mồ côi. | `dps -o` |
+
+### 5. Xem nhật ký hoạt động (Logs)
+| Lệnh | Tham số & Ý nghĩa chi tiết | Ví dụ thực tế |
+| :--- | :--- | :--- |
+| `dps -l <mục_tiêu> [service] [N]` | In ra `N` dòng log gần nhất (mặc định `20`) rồi thoát. | `dps -l 1`<br>`dps -l mosquitto 50`<br>`dps -l ~/docker/homeassistant/ homeassistant 100` |
+| `dps -f <mục_tiêu> [service] [N]` | In `N` dòng log gần nhất (mặc định `20`) và tiếp tục theo dõi log mới trực tiếp (`--follow`). | `dps -f 1`<br>`dps -f ~/docker/homeassistant/ mosquitto 30` |
 
 ## Cơ chế Tab Completion & Nhận diện mục tiêu thông minh
 
