@@ -119,7 +119,8 @@ PY
       TARGET_T="${1:-}"
       [[ -z "$TARGET_T" ]] && { echo "Dùng: dps -t <tên_hoặc_#>" >&2; exit 1; }
       TARGET="$TARGET_T" python3 - <<'PY'
-import os, subprocess
+import os, re, shutil, subprocess
+
 target = os.environ.get("TARGET", "").strip()
 raw = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}"], text=True)
 names = sorted([x.strip() for x in raw.splitlines() if x.strip()], key=str.lower)
@@ -133,8 +134,58 @@ else:
     matches = exact or [n for n in names if target.lower() in n.lower()]
     if not matches: raise SystemExit(f"Không tìm thấy container đang chạy khớp: {target}")
     cname = matches[0]
-print(f"=== TOP: {cname} ===")
-subprocess.run(["docker", "top", cname], check=True)
+
+out = subprocess.check_output(["docker", "top", cname], text=True)
+lines = [l.rstrip() for l in out.splitlines() if l.strip()]
+if len(lines) <= 1:
+    print(f"=== TOP: {cname} (0 processes) ===")
+    raise SystemExit(0)
+
+raw_headers = re.split(r"\s+", lines[0].strip())
+col_idx = {h.upper(): i for i, h in enumerate(raw_headers)}
+rows = []
+for i, ln in enumerate(lines[1:], 1):
+    parts = re.split(r"\s+", ln.strip(), maxsplit=len(raw_headers) - 1)
+    while len(parts) < len(raw_headers):
+        parts.append("-")
+    uid = parts[col_idx["UID"]] if "UID" in col_idx else "-"
+    pid = parts[col_idx["PID"]] if "PID" in col_idx else "-"
+    ppid = parts[col_idx["PPID"]] if "PPID" in col_idx else "-"
+    stime = parts[col_idx["STIME"]] if "STIME" in col_idx else "-"
+    ctime = parts[col_idx["TIME"]] if "TIME" in col_idx else "-"
+    cmd = parts[col_idx["CMD"]] if "CMD" in col_idx else parts[-1]
+    rows.append([str(i), pid, ppid, uid, stime, ctime, cmd])
+
+headers = ["#", "PID", "PPID", "USER", "STIME", "TIME", "COMMAND"]
+widths = [max(len(x) for x in col) for col in zip(headers, *rows)]
+term_cols = shutil.get_terminal_size((180, 20)).columns
+overhead = 1 + 3 * len(headers)
+max_total = max(65, term_cols - 1)
+if sum(widths) + overhead > max_total:
+    avail = max(20, widths[-1] - ((sum(widths) + overhead) - max_total))
+    widths[-1] = avail
+    for r in rows:
+        if len(r[-1]) > avail:
+            r[-1] = r[-1][:max(1, avail - 1)] + "…"
+
+line_fn = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+def fmt_row(cols, col_code=""):
+    cells = []
+    for idx, val in enumerate(cols):
+        pad = val.ljust(widths[idx])
+        cells.append(f"{col_code}{pad}\033[0m" if col_code else pad)
+    return "│ " + " │ ".join(cells) + " │"
+
+print(f"=== TOP: {cname} ({len(rows)} processes) ===")
+print(line_fn("┌", "┬", "┐"))
+print(fmt_row(headers))
+print(line_fn("├", "┼", "┤"))
+pids_set = {r[1] for r in rows}
+for idx, r in enumerate(rows):
+    is_root_proc = (idx == 0) or (r[2] not in pids_set)
+    c_code = "\033[36m" if is_root_proc else ""
+    print(fmt_row(r, c_code))
+print(line_fn("└", "┴", "┘"))
 PY
       exit $?
       ;;
