@@ -500,29 +500,47 @@ done
 
 if [[ "$HELP_MODE" == "1" ]]; then
   cat <<'HELP_EOF'
-dps - Trình xem nhanh trạng thái Docker container, image & hệ thống (Debian 12)
+[1mdps[0m — Trình quản lý & giám sát nhanh Docker CLI (Debian 12)
+[90mHỗ trợ gọi từ bất kỳ thư mục nào qua tên container, số thứ tự #, tên dự án ~/docker/ hoặc đường dẫn Compose.[0m
 
-Cách dùng:
-  dps [từ_khóa]                   Xem container đang chạy (CONTAINER, STATUS, PORTS, NETWORKS)
-  dps -a [từ_khóa]                Xem toàn bộ container kể cả đã dừng (format như dps)
-  dps -u [service...]             Chạy docker compose up -d ở thư mục hiện tại
-  dps -r <tên_hoặc_#>             Khởi động lại (docker restart) container theo tên hoặc số thứ tự #
-  dps -k <tên_hoặc_#>             Dừng (docker stop) container theo tên hoặc số thứ tự #
-  dps -m <tên_hoặc_#>             Dừng và xóa (docker rm -f) container theo tên hoặc số thứ tự #
-  dps -n [tên_mạng]               Xem danh sách Docker networks, subnet, gateway & container đang kết nối
-  dps -t <tên_hoặc_#>             Xem các tiến trình đang chạy trong container (docker top)
-  dps -e [từ_khóa]                Theo dõi sự kiện Docker real-time (docker events)
-  dps -s [-a]                     Xem CPU, MEM, RESTART, DISK của container (thêm -a để xem cả container dừng)
-  dps -w [tên_container]          Chạy trực tiếp giao diện docker stats
-  dps -x <container> [shell]      Mở shell docker exec -it (/bin/bash -> /bin/sh)
-  dps -d [-a] [từ_khóa]           Xem DISK, COMPOSE FILE và MOUNTS (phân chia đường kẻ từng container) (kèm VIRTUAL)
-  dps -p [từ_khóa]                Xem container đang chạy + tách HOST/EXPOSE PORTS, NETWORKS, IP, PEER
-  dps -i [từ_khóa]                Xem danh sách Docker image kèm cột STATE và USED BY
-  dps -c <tên_hoặc_#>             Xem gọn cấu hình, network, mount và compose của 1 container
-  dps -o                          Xem tổng quan dung lượng Images, Containers, Local Volumes, Build Cache & volume mồ côi
-  dps -l <tên_hoặc_#> [N]         Xem N dòng log cuối (mặc định 20) theo tên hoặc số thứ tự #
-  dps -f <tên_hoặc_#> [N]         Xem N dòng log trực tiếp (mặc định 20) theo tên hoặc số thứ tự #
-  dps -h | --help                 Hiển thị trợ giúp này
+[1;33mCÚ PHÁP:[0m
+  [36mdps[0m [tùy_chọn] [mục_tiêu] [service / tham_số]
+
+[1;33m1. TRẠNG THÁI & CẤU HÌNH:[0m
+  [32mdps[0m [mục_tiêu]                   Xem container đang chạy & restarting (CONTAINER, STATUS, PORTS, NETWORKS)
+  [32mdps -a[0m [mục_tiêu]                Xem toàn bộ container kể cả đã dừng (thêm STATE, HEALTH, RESTART, DISK)
+  [32mdps -c[0m <mục_tiêu> [service]      Xem chi tiết cấu hình, image, lệnh chạy, network, mount & file compose
+  [32mdps -h[0m | [32m--help[0m                  Hiển thị bảng hướng dẫn sử dụng này
+
+[1;33m2. ĐIỀU KHIỂN VÒNG ĐỜI & TƯƠNG TÁC:[0m
+  [32mdps -u[0m [mục_tiêu] [service...]   Chạy docker compose up -d (tại thư mục hiện tại hoặc từ đường dẫn dự án)
+  [32mdps -r[0m <mục_tiêu> [service]      Khởi động lại (docker restart) 1 container hoặc toàn bộ dự án
+  [32mdps -k[0m <mục_tiêu> [service]      Dừng (docker stop) 1 container đang chạy hoặc toàn bộ dự án
+  [32mdps -m[0m <mục_tiêu> [service]      Dừng và xóa hẳn (docker rm -f) container hoặc toàn bộ dự án
+  [32mdps -x[0m <mục_tiêu> [service] [sh] Mở shell tương tác docker exec -it (tự ưu tiên /bin/bash -> /bin/sh)
+
+[1;33m3. GIÁM SÁT TÀI NGUYÊN, TIẾN TRÌNH & SỰ KIỆN:[0m
+  [32mdps -s[0m [-a] [mục_tiêu]           Xem mức tiêu thụ CPU, MEM, RESTART, DISK (-a để tính cả container dừng)
+  [32mdps -w[0m [mục_tiêu] [service]      Mở màn hình theo dõi tài nguyên thời gian thực (docker stats)
+  [32mdps -t[0m <mục_tiêu> [service]      Xem bảng tiến trình đang chạy trong container (docker top)
+  [32mdps -e[0m [từ_khóa]                 Theo dõi luồng sự kiện Docker real-time (docker events, Ctrl+C để thoát)
+
+[1;33m4. MẠNG, LƯU TRỮ & IMAGE:[0m
+  [32mdps -n[0m [tên_mạng]                Xem danh sách Docker networks, driver, subnet, gateway & container kết nối
+  [32mdps -p[0m [mục_tiêu]                Xem chi tiết kết nối mạng (HOST/EXPOSE PORTS, NETWORKS, IP, PEER)
+  [32mdps -d[0m [-a] [mục_tiêu]           Xem dung lượng DISK, VIRTUAL, đường dẫn file compose & chi tiết MOUNTS
+  [32mdps -i[0m [từ_khóa]                 Xem danh sách Docker images kèm trạng thái STATE và USED BY
+  [32mdps -o[0m                           Thống kê tổng quan dung lượng Docker, volume mồ côi & writable layer
+
+[1;33m5. NHẬT KÝ HOẠT ĐỘNG (LOGS):[0m
+  [32mdps -l[0m <mục_tiêu> [service] [N]  Xem N dòng log cuối (mặc định 20 dòng)
+  [32mdps -f[0m <mục_tiêu> [service] [N]  Xem N dòng log cuối (mặc định 20) và theo dõi trực tiếp (Ctrl+C để thoát)
+
+[1;33mQUY ƯỚC <mục_tiêu> & VÍ DỤ:[0m
+  [90m• Tên / Số thứ tự # :[0m dps -r mosquitto   |  dps -l 1 50
+  [90m• Dự án ~/docker/   :[0m dps -u dozzle      |  dps -r homeassistant mosquitto
+  [90m• Đường dẫn bất kỳ  :[0m dps ~/docker/homeassistant/  |  dps -k ~/docker/homeassistant/
+  [90m• Phím tắt Terminal :[0m Nhấn [36mTab[0m để tự động gợi ý tên container, dự án, đường dẫn & service.
 HELP_EOF
   exit 0
 fi
